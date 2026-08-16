@@ -1,0 +1,1 @@
+{"name":"@relead/app","version":"0.1.0","private":true,"type":"module","description":"Authenticated Cloudflare web application for RelNet v90.","scripts":{"test":"node --test","check":"npm test && npx wrangler deploy --dry-run","deploy":"wrangler deploy"},"devDependencies":{"wrangler":"4.30.0"}}
