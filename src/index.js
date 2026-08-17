@@ -1,7 +1,58 @@
-import themeCss from './theme.css';
-import themeClient from './theme-client.txt';
-import{injectTheme,isPanelPath,isThemeableStylesheet,normalizeOrigin,shouldInjectHtml}from'./policy.js';
-const textResponse=(body,type)=>new Response(body,{headers:{'content-type':`${type}; charset=utf-8`,'cache-control':'public, max-age=300','x-content-type-options':'nosniff'}});
-function copyHeaders(r){const h=new Headers(r.headers);h.set('x-relead-edge','relead-app-v90-preview');if(shouldInjectHtml(h.get('content-type')))h.set('cache-control','no-store');return h;}
-async function proxyPanel(request,env){const incoming=new URL(request.url),origin=normalizeOrigin(env.BACKEND_ORIGIN),backendPath=incoming.pathname==='/console/auth'?'/console/login':incoming.pathname==='/admin/auth'?'/admin/login':incoming.pathname,target=new URL(`${backendPath}${incoming.search}`,`${origin}/`),headers=new Headers(request.headers);headers.set('x-forwarded-host',incoming.host);headers.set('x-forwarded-proto','https');headers.set('x-relead-edge-surface',incoming.pathname.startsWith('/console')?'console':'admin');if(headers.has('origin'))headers.set('origin',origin);if(headers.has('referer')){try{const r=new URL(headers.get('referer'));headers.set('referer',`${origin}${r.pathname}${r.search}`)}catch{headers.delete('referer')}}headers.delete('host');const upstreamRequest=new Request(target,{method:request.method,headers,body:['GET','HEAD'].includes(request.method)?undefined:request.body,redirect:'manual'}),upstream=await fetch(upstreamRequest),responseHeaders=copyHeaders(upstream);if(upstream.status===101)return upstream;if(isThemeableStylesheet(incoming.pathname)&&upstream.ok){const original=await upstream.text();responseHeaders.set('content-type','text/css; charset=utf-8');return new Response(`${original}\n\n/* ReLead Cloudflare theme */\n${themeCss}`,{status:upstream.status,headers:responseHeaders})}if(shouldInjectHtml(upstream.headers.get('content-type'))){const html=await upstream.text();return new Response(injectTheme(html),{status:upstream.status,headers:responseHeaders})}return new Response(upstream.body,{status:upstream.status,statusText:upstream.statusText,headers:responseHeaders});}
-export default{async fetch(request,env){const url=new URL(request.url);if(url.pathname==='/__relead/theme.css')return textResponse(themeCss,'text/css');if(url.pathname==='/__relead/theme-client.js')return textResponse(themeClient,'text/javascript');if(url.pathname==='/healthz')return Response.json({status:'ok',edge:'relead-relead-app-v90-preview'});if(url.pathname==='/')return Response.redirect('https://relead.com.mx',308);if(!isPanelPath(url.pathname))return Response.json({detail:'Not found'},{status:404,headers:{'cache-control':'no-store'}});return proxyPanel(request,env)}};
+const PUBLIC_SITE = 'https://relead.com.mx';
+const CANONICAL_CONSOLE = 'https://console.relead.com.mx';
+
+function canonicalTarget(url) {
+  if (url.pathname === '/') return new URL(PUBLIC_SITE);
+  if (url.pathname === '/console' || url.pathname.startsWith('/console/')) {
+    const target = new URL(url.pathname + url.search, CANONICAL_CONSOLE);
+    target.hash = url.hash;
+    return target;
+  }
+  if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+    const target = new URL(url.pathname + url.search, CANONICAL_CONSOLE);
+    target.hash = url.hash;
+    return target;
+  }
+  if (url.pathname === '/login') {
+    return new URL('/console/login' + url.search, CANONICAL_CONSOLE);
+  }
+  return null;
+}
+
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/healthz') {
+      return Response.json(
+        {
+          status: 'ok',
+          edge: 'relead-app-v90-canonical-redirect',
+          canonical_console: CANONICAL_CONSOLE,
+        },
+        { headers: { 'cache-control': 'no-store' } },
+      );
+    }
+
+    const target = canonicalTarget(url);
+    if (target) {
+      return Response.redirect(target.toString(), 308);
+    }
+
+    return Response.json(
+      {
+        detail: 'Not found',
+        canonical_console: CANONICAL_CONSOLE,
+      },
+      {
+        status: 404,
+        headers: {
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+        },
+      },
+    );
+  },
+};
+
+export { canonicalTarget };
