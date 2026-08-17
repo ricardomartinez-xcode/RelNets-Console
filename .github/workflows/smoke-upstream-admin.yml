@@ -1,0 +1,25 @@
+name: Smoke - Upstream Admin Console
+
+on:
+  push:
+    branches: ['test/v90-console-smoke-split-20260817']
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: admin.relead.com.mx serves RelNet Console
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --max-redirs 5 \
+            --connect-timeout 10 --max-time 30 \
+            --output /tmp/body \
+            --write-out '%{http_code}\n%{url_effective}\n%{num_redirects}\n' \
+            https://admin.relead.com.mx/console/ > /tmp/meta
+          test "$(sed -n '1p' /tmp/meta)" = 200
+          grep -q 'RelNet Console' /tmp/body
+          ! grep -qi 'My RelNet' /tmp/body

@@ -1,0 +1,27 @@
+name: Smoke - Admin API Shape
+
+on:
+  push:
+    branches: ['test/v90-console-smoke-split-20260817']
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: admin API remains non-graphical
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --show-error --max-redirs 0 \
+            --connect-timeout 10 --max-time 30 \
+            --output /tmp/body --dump-header /tmp/headers \
+            --write-out '%{http_code}' \
+            https://console.relead.com.mx/admin/api/session || true)"
+          case "$code" in 200|401|403) ;; *) echo "unexpected status $code" >&2; exit 1 ;; esac
+          if grep -qi '^content-type: *text/html' /tmp/headers; then
+            echo 'admin API returned HTML' >&2
+            exit 1
+          fi
