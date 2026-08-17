@@ -1,16 +1,13 @@
 # ReLead-App
 
-Aplicación web autenticada de RelNet v90 para Cloudflare Workers. Destino final: `app.relead.com.mx`, conforme al contrato v90 de User-Isolated Spaces.
+Legacy edge compatibility layer for ReLead v90.
 
-## Estado de migración
+## Canonical surfaces
 
-- `/admin/*` y `/console/*` se sirven en el Worker y conservan el contrato legacy del Controller durante la transición.
-- `/admin/auth` y `/console/auth` son aliases de compatibilidad al login actual mientras la identidad Space-bound queda integrada.
-- `/admin` seguirá restringido a administración de plataforma; `/console` será la superficie de usuario aislada por Space.
-- Cookies HttpOnly, CSRF, reautenticación y autorización permanecen server-side; no se copian secretos al navegador.
-- El proxy sólo permite `/admin*` y `/console*`; no expone MCP ni otras rutas internas.
-- El tema reutiliza los tokens claro/oscuro de `relead.com.mx`.
+- Public: `https://relead.com.mx`
+- RelNet Console: `https://console.relead.com.mx`
+- Backend/API: `https://api.relead.com.mx`
 
-## Gate de producción
+`app.relead.com.mx` no longer owns a graphical product surface. GET/HEAD requests under `/admin` and `/console` are redirected to **RelNet Console**. During the migration window, legacy `/admin/api/*`, `/console/api/*` and non-GET login/auth requests continue to proxy to the backend so cached clients are not cut off abruptly.
 
-Este repo puede desplegarse a `workers.dev` para preview. El dominio `app.relead.com.mx` no debe adjuntarse hasta superar bootstrap e isolation negativa Space A/B, API/MCP/runtime, HA, reconciliación final v89/branding y el release gate v90.
+The compatibility window should be removed only after session/cookie migration is verified in staging.

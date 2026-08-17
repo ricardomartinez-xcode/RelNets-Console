@@ -19,7 +19,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm test
       - run: npm run check
+      - name: Guard canonical naming
+        run: |
+          grep -Rni 'console.relead.com.mx' src test
+          ! grep -Rni --exclude-dir=node_modules 'My RelNet' src test
