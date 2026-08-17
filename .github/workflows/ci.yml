@@ -1,12 +1,12 @@
-name: ReLead App CI
+name: ReLead App CI (Canonical Redirect)
 
 on:
   pull_request:
+    branches: [main]
   push:
     branches:
       - main
-      - 'fix/**'
-      - 'feat/**'
+      - fix/v90-canonical-console-redirects
 
 permissions:
   contents: read

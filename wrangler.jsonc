@@ -1,1 +1,10 @@
-{"$schema":"node_modules/wrangler/config-schema.json","name":"relead-app-v90-preview","main":"src/index.js","compatibility_date":"2026-08-16","workers_dev":true,"vars":{"BACKEND_ORIGIN":"https://api.relead.com.mx"},"rules":[{"type":"Text","globs":["**/*.css","**/*.txt"],"fallthrough":true}],"observability":{"enabled":true}}
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "relead-app-v90-canonical-redirect-preview",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-16",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  }
+}
