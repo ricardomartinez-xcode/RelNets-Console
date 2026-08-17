@@ -1,0 +1,73 @@
+name: Production Console Smoke
+
+on:
+  push:
+    branches:
+      - 'test/v90-console-production-smoke-*'
+
+permissions:
+  contents: read
+
+jobs:
+  public-console:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Canonical Console renders without redirect loop
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --max-redirs 5 --connect-timeout 10 --max-time 30 \
+            --output /tmp/console.html \
+            --write-out '%{url_effective}\n%{num_redirects}\n%{http_code}\n' \
+            https://console.relead.com.mx/console/ > /tmp/console.meta
+          grep -q 'RelNet Console' /tmp/console.html
+          ! grep -qi 'My RelNet' /tmp/console.html
+          effective="$(sed -n '1p' /tmp/console.meta)"
+          redirects="$(sed -n '2p' /tmp/console.meta)"
+          status="$(sed -n '3p' /tmp/console.meta)"
+          [[ "$effective" == https://console.relead.com.mx/* ]]
+          [[ "$redirects" -le 5 ]]
+          [[ "$status" == 200 ]]
+
+      - name: Legacy Admin UI lands inside Console without looping
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --max-redirs 5 --connect-timeout 10 --max-time 30 \
+            --output /tmp/admin.html \
+            --write-out '%{url_effective}\n%{num_redirects}\n%{http_code}\n' \
+            https://console.relead.com.mx/admin > /tmp/admin.meta
+          grep -q 'RelNet Console' /tmp/admin.html
+          effective="$(sed -n '1p' /tmp/admin.meta)"
+          status="$(sed -n '3p' /tmp/admin.meta)"
+          [[ "$effective" == https://console.relead.com.mx/console/* ]]
+          [[ "$status" == 200 ]]
+
+      - name: Registration UI is reachable
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --max-redirs 5 --connect-timeout 10 --max-time 30 \
+            https://console.relead.com.mx/register \
+            --output /tmp/register.html
+          grep -qi '<form' /tmp/register.html
+          grep -Eqi 'registr|crear.*cuenta|sign.?up' /tmp/register.html
+
+      - name: Admin session endpoint remains API-shaped
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --show-error \
+            --max-redirs 0 --connect-timeout 10 --max-time 30 \
+            --output /tmp/admin-api.body \
+            --dump-header /tmp/admin-api.headers \
+            --write-out '%{http_code}' \
+            https://console.relead.com.mx/admin/api/session || true)"
+          case "$code" in
+            200|401|403) ;;
+            *) echo "unexpected admin API status: $code" >&2; exit 1 ;;
+          esac
+          if grep -qi '^content-type: *text/html' /tmp/admin-api.headers; then
+            echo 'admin API unexpectedly returned HTML' >&2
+            exit 1
+          fi
