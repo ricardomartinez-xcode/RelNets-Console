@@ -1,7 +1,81 @@
-import themeCss from './theme.css';
-import themeClient from './theme-client.txt';
-import{injectTheme,isPanelPath,isThemeableStylesheet,normalizeOrigin,shouldInjectHtml}from'./policy.js';
-const textResponse=(body,type)=>new Response(body,{headers:{'content-type':`${type}; charset=utf-8`,'cache-control':'public, max-age=300','x-content-type-options':'nosniff'}});
-function copyHeaders(r){const h=new Headers(r.headers);h.set('x-relead-edge','relead-app-v90-preview');if(shouldInjectHtml(h.get('content-type')))h.set('cache-control','no-store');return h;}
-async function proxyPanel(request,env){const incoming=new URL(request.url),origin=normalizeOrigin(env.BACKEND_ORIGIN),backendPath=incoming.pathname==='/console/auth'?'/console/login':incoming.pathname==='/admin/auth'?'/admin/login':incoming.pathname,target=new URL(`${backendPath}${incoming.search}`,`${origin}/`),headers=new Headers(request.headers);headers.set('x-forwarded-host',incoming.host);headers.set('x-forwarded-proto','https');headers.set('x-relead-edge-surface',incoming.pathname.startsWith('/console')?'console':'admin');if(headers.has('origin'))headers.set('origin',origin);if(headers.has('referer')){try{const r=new URL(headers.get('referer'));headers.set('referer',`${origin}${r.pathname}${r.search}`)}catch{headers.delete('referer')}}headers.delete('host');const upstreamRequest=new Request(target,{method:request.method,headers,body:['GET','HEAD'].includes(request.method)?undefined:request.body,redirect:'manual'}),upstream=await fetch(upstreamRequest),responseHeaders=copyHeaders(upstream);if(upstream.status===101)return upstream;if(isThemeableStylesheet(incoming.pathname)&&upstream.ok){const original=await upstream.text();responseHeaders.set('content-type','text/css; charset=utf-8');return new Response(`${original}\n\n/* ReLead Cloudflare theme */\n${themeCss}`,{status:upstream.status,headers:responseHeaders})}if(shouldInjectHtml(upstream.headers.get('content-type'))){const html=await upstream.text();return new Response(injectTheme(html),{status:upstream.status,headers:responseHeaders})}return new Response(upstream.body,{status:upstream.status,statusText:upstream.statusText,headers:responseHeaders});}
-export default{async fetch(request,env){const url=new URL(request.url);if(url.pathname==='/__relead/theme.css')return textResponse(themeCss,'text/css');if(url.pathname==='/__relead/theme-client.js')return textResponse(themeClient,'text/javascript');if(url.pathname==='/healthz')return Response.json({status:'ok',edge:'relead-relead-app-v90-preview'});if(url.pathname==='/')return Response.redirect('https://relead.com.mx',308);if(!isPanelPath(url.pathname))return Response.json({detail:'Not found'},{status:404,headers:{'cache-control':'no-store'}});return proxyPanel(request,env)}};
+import{canonicalConsoleUrl,isLegacyProxyPath,isPanelPath,normalizeOrigin}from'./policy.js';
+
+const SECURITY_HEADERS={
+  'cache-control':'no-store',
+  'referrer-policy':'no-referrer',
+  'x-content-type-options':'nosniff',
+  'x-frame-options':'DENY'
+};
+
+function withSecurity(response){
+  const next=new Response(response.body,response);
+  for(const [key,value] of Object.entries(SECURITY_HEADERS)) next.headers.set(key,value);
+  return next;
+}
+
+function redirect(target,status=308){
+  return withSecurity(new Response(null,{status,headers:{location:target.toString()}}));
+}
+
+function rewriteBackendLocation(location,backendOrigin){
+  if(!location) return null;
+  let resolved;
+  try{resolved=new URL(location,`${backendOrigin}/`);}catch{return location;}
+  if(resolved.origin!==backendOrigin) return location;
+  if(!isPanelPath(resolved.pathname)) return location;
+  return canonicalConsoleUrl(resolved).toString();
+}
+
+async function proxyLegacy(request,env){
+  const incoming=new URL(request.url);
+  const backendOrigin=normalizeOrigin(env.BACKEND_ORIGIN);
+  let backendPath=incoming.pathname;
+  if(backendPath==='/console/auth') backendPath='/console/login';
+  if(backendPath==='/admin/auth') backendPath='/admin/login';
+  const target=new URL(`${backendPath}${incoming.search}`,`${backendOrigin}/`);
+  const headers=new Headers(request.headers);
+  headers.set('x-forwarded-host',incoming.host);
+  headers.set('x-forwarded-proto','https');
+  headers.set('x-relead-edge-surface',incoming.pathname.startsWith('/console')?'console':'admin');
+  if(headers.has('origin')) headers.set('origin',backendOrigin);
+  if(headers.has('referer')) headers.set('referer',`${backendOrigin}${backendPath}`);
+  headers.delete('host');
+
+  const upstream=await fetch(new Request(target,{
+    method:request.method,
+    headers,
+    body:['GET','HEAD'].includes(request.method)?undefined:request.body,
+    redirect:'manual'
+  }));
+  if(upstream.status===101) return upstream;
+
+  const responseHeaders=new Headers(upstream.headers);
+  const location=rewriteBackendLocation(responseHeaders.get('location'),backendOrigin);
+  if(location) responseHeaders.set('location',location);
+  responseHeaders.set('cache-control','no-store');
+  responseHeaders.set('x-relead-edge','relead-app-v90-legacy');
+  responseHeaders.set('x-content-type-options','nosniff');
+  return new Response(upstream.body,{status:upstream.status,statusText:upstream.statusText,headers:responseHeaders});
+}
+
+export default{
+  async fetch(request,env){
+    const url=new URL(request.url);
+
+    if(url.pathname==='/healthz'){
+      return withSecurity(Response.json({status:'ok',edge:'relead-app-v90-legacy',canonical_console:'https://console.relead.com.mx'}));
+    }
+
+    if(url.pathname==='/') return redirect(canonicalConsoleUrl(url));
+
+    // Keep only API and non-GET auth compatibility during migration.
+    if(isLegacyProxyPath(url.pathname,request.method)) return proxyLegacy(request,env);
+
+    // ReLead-App no longer serves a graphical surface.
+    if(isPanelPath(url.pathname)&&['GET','HEAD'].includes(request.method)){
+      return redirect(canonicalConsoleUrl(url));
+    }
+
+    return withSecurity(Response.json({detail:'Not found',canonical_console:'https://console.relead.com.mx'},{status:404}));
+  }
+};
