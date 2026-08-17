@@ -1,40 +1,103 @@
-export const CANONICAL_CONSOLE_ORIGIN='https://console.relead.com.mx';
-export const PANEL_PREFIXES=['/admin','/console'];
-export const LEGACY_API_PREFIXES=['/admin/api/','/console/api/'];
+export const CANONICAL_CONSOLE_ORIGIN = 'https://console.relead.com.mx';
+export const DEFAULT_CONSOLE_UI_ORIGIN = 'https://admin.relead.com.mx';
 
-export function isPanelPath(path){
-  return PANEL_PREFIXES.some(prefix=>path===prefix||path.startsWith(`${prefix}/`));
+const BACKEND_PREFIXES = [
+  '/admin/api/',
+  '/console/api/',
+  '/api/v1/',
+  '/relnet/v1/',
+  '/auth/',
+  '/oauth/',
+  '/install/',
+  '/ws/'
+];
+
+const AUTH_MUTATION_PATHS = new Set([
+  '/admin/login',
+  '/console/login',
+  '/admin/auth',
+  '/console/auth'
+]);
+
+export function isPanelPath(path) {
+  return path === '/admin' || path.startsWith('/admin/') || path === '/console' || path.startsWith('/console/');
 }
 
-export function isLegacyProxyPath(path,method='GET'){
-  if(LEGACY_API_PREFIXES.some(prefix=>path.startsWith(prefix))) return true;
-  const authPath=['/admin/login','/console/login','/admin/auth','/console/auth'].includes(path);
-  return authPath&&!['GET','HEAD'].includes(String(method).toUpperCase());
+export function isBackendProxyPath(path, method = 'GET') {
+  if (BACKEND_PREFIXES.some((prefix) => path.startsWith(prefix))) return true;
+  return AUTH_MUTATION_PATHS.has(path) && !['GET', 'HEAD'].includes(String(method).toUpperCase());
 }
 
-export function canonicalConsoleUrl(value){
-  const source=value instanceof URL?new URL(value):new URL(String(value),'https://app.relead.com.mx');
-  const target=new URL('/console/',CANONICAL_CONSOLE_ORIGIN);
+export const isLegacyProxyPath = isBackendProxyPath;
 
-  if(source.pathname.startsWith('/console/')) target.pathname=source.pathname;
-  else if(source.pathname==='/console') target.pathname='/console/';
-  else if(source.pathname.startsWith('/admin/static/')) target.pathname=source.pathname.replace('/admin/static/','/console/static/');
-  else if(source.pathname==='/admin/manifest.webmanifest') target.pathname='/console/manifest.webmanifest';
-  else if(source.pathname==='/admin/sw.js') target.pathname='/console/sw.js';
-  else if(source.pathname==='/admin/login'||source.pathname==='/admin/auth') target.pathname='/console/login';
+export function isConsoleUiPath(path) {
+  if (path === '/console' || (path.startsWith('/console/') && !path.startsWith('/console/api/'))) return true;
+  if (path === '/register' || path.startsWith('/register/')) return true;
+  if (path === '/security/otp' || path.startsWith('/security/otp/')) return true;
+  if (path === '/billing' || path.startsWith('/billing/')) return true;
+  return false;
+}
 
-  for(const [key,val] of source.searchParams) target.searchParams.append(key,val);
-  if(source.pathname==='/admin'||source.pathname==='/admin/'||(source.pathname.startsWith('/admin/')&&!source.pathname.startsWith('/admin/static/'))) target.searchParams.set('area','admin');
+export function canonicalConsoleUrl(value, origin = CANONICAL_CONSOLE_ORIGIN) {
+  const source = value instanceof URL ? new URL(value) : new URL(String(value), 'https://app.relead.com.mx');
+  const target = new URL('/console/', origin);
+
+  if (source.pathname.startsWith('/console/')) target.pathname = source.pathname;
+  else if (source.pathname === '/console') target.pathname = '/console/';
+  else if (source.pathname.startsWith('/admin/static/')) target.pathname = source.pathname.replace('/admin/static/', '/console/static/');
+  else if (source.pathname === '/admin/manifest.webmanifest') target.pathname = '/console/manifest.webmanifest';
+  else if (source.pathname === '/admin/sw.js') target.pathname = '/console/sw.js';
+  else if (source.pathname === '/admin/login' || source.pathname === '/admin/auth') target.pathname = '/console/login';
+
+  for (const [key, val] of source.searchParams) target.searchParams.append(key, val);
+  if (source.pathname === '/admin' || source.pathname === '/admin/') target.searchParams.set('area', 'admin');
+  else if (source.pathname.startsWith('/admin/') && !source.pathname.startsWith('/admin/static/')) {
+    target.searchParams.set('area', 'admin');
+  }
   return target;
 }
 
-export function normalizeOrigin(value){
-  const url=new URL(value||'https://api.relead.com.mx');
-  if(url.protocol!=='https:') throw new Error('BACKEND_ORIGIN must use HTTPS');
-  url.pathname='/';url.search='';url.hash='';
-  return url.toString().replace(/\/$/,'');
+export function localCanonicalTarget(value) {
+  const source = value instanceof URL ? new URL(value) : new URL(String(value), CANONICAL_CONSOLE_ORIGIN);
+  return canonicalConsoleUrl(source, source.origin);
 }
 
-export function shouldInjectHtml(){return false;}
-export function isThemeableStylesheet(){return false;}
-export function injectTheme(html){return html;}
+export function normalizeOrigin(value) {
+  const url = new URL(value || 'https://api.relead.com.mx');
+  if (url.protocol !== 'https:') throw new Error('BACKEND_ORIGIN must use HTTPS');
+  url.pathname = '/';
+  url.search = '';
+  url.hash = '';
+  return url.toString().replace(/\/$/, '');
+}
+
+export function normalizeUiOrigin(value) {
+  const url = new URL(value || DEFAULT_CONSOLE_UI_ORIGIN);
+  if (url.protocol !== 'https:') throw new Error('CONSOLE_UI_ORIGIN must use HTTPS');
+  url.pathname = '/';
+  url.search = '';
+  url.hash = '';
+  return url.toString().replace(/\/$/, '');
+}
+
+export function assertDistinctUiOrigin(incomingOrigin, uiOrigin) {
+  if (new URL(incomingOrigin).origin === new URL(uiOrigin).origin) {
+    throw new Error('Console UI upstream cannot equal the incoming console origin.');
+  }
+}
+
+export function rewriteUiLocation(location, incomingOrigin, uiOrigin) {
+  if (!location) return null;
+  let resolved;
+  try {
+    resolved = new URL(location, `${uiOrigin}/`);
+  } catch {
+    return location;
+  }
+  if (resolved.origin !== new URL(uiOrigin).origin) return location;
+  return new URL(`${resolved.pathname}${resolved.search}${resolved.hash}`, incomingOrigin).toString();
+}
+
+export function shouldInjectHtml() { return false; }
+export function isThemeableStylesheet() { return false; }
+export function injectTheme(html) { return html; }
