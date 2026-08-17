@@ -1,0 +1,429 @@
+/* RelNet Console v90 shell — visual layer only; functional IDs stay owned by app.js. */
+:root {
+  --v90-bg: #f4f6f9;
+  --v90-panel: rgba(255,255,255,.88);
+  --v90-panel-solid: #ffffff;
+  --v90-panel-2: #eef2f6;
+  --v90-text: #121824;
+  --v90-muted: #687487;
+  --v90-line: #dce2ea;
+  --v90-line-strong: #c7d0dc;
+  --v90-sidebar: #0c121b;
+  --v90-sidebar-2: #111a27;
+  --v90-sidebar-text: #eef3f9;
+  --v90-sidebar-muted: #96a4b6;
+  --v90-accent: #6574ff;
+  --v90-ok: #45c08a;
+  --v90-warn: #e0a43a;
+  --v90-danger: #e16464;
+  --v90-shadow: 0 20px 55px rgba(15,23,42,.09);
+  --v90-sidebar-width: 278px;
+  --v90-sidebar-compact: 82px;
+}
+
+html { background: var(--v90-bg); }
+body.relnet-shell {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 88% -6%, rgba(101,116,255,.10), transparent 31rem),
+    var(--v90-bg);
+  color: var(--v90-text);
+  color-scheme: light dark;
+}
+
+.relnet-shell .sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 40;
+  width: var(--v90-sidebar-width);
+  min-width: var(--v90-sidebar-width);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 14px;
+  overflow: hidden auto;
+  border-right: 1px solid rgba(255,255,255,.07);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(101,116,255,.14), transparent 18rem),
+    linear-gradient(180deg,var(--v90-sidebar-2),var(--v90-sidebar));
+  color: var(--v90-sidebar-text);
+  transition: width .2s ease, min-width .2s ease, transform .2s ease;
+}
+
+.sidebar-head {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-toggle {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 12px;
+  background: rgba(255,255,255,.045);
+  color: var(--v90-sidebar-text);
+  font: inherit;
+  cursor: pointer;
+}
+.sidebar-toggle:hover { background: rgba(255,255,255,.09); }
+
+.brand-v90 {
+  min-width: 0;
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+.brand-symbol {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: #f6f8fb;
+  color: #0d131c;
+  font-weight: 900;
+  letter-spacing: -.04em;
+}
+.brand-copy { min-width: 0; display: grid; line-height: 1.05; }
+.brand-copy strong { font-size: .96rem; letter-spacing: -.02em; }
+.brand-copy small { color: var(--v90-sidebar-muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .14em; margin-top: 4px; }
+
+.relnet-shell .environment-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  background: rgba(255,255,255,.035);
+}
+.environment-card small { display: block; color: var(--v90-sidebar-muted); }
+.environment-card strong { display: block; margin-top: 2px; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.relnet-shell #navigation {
+  display: grid;
+  gap: 5px;
+  flex: 1 1 auto;
+  align-content: start;
+  min-height: 0;
+}
+.relnet-shell #navigation a,
+.relnet-shell #navigation button {
+  min-height: 43px;
+  border-radius: 11px;
+}
+.relnet-shell #navigation a {
+  color: var(--v90-sidebar-muted);
+}
+.relnet-shell #navigation a:hover,
+.relnet-shell #navigation a.active,
+.relnet-shell #navigation [aria-current="page"] {
+  color: var(--v90-sidebar-text);
+  background: rgba(255,255,255,.07);
+}
+
+.relnet-shell .sidebar-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+.relnet-shell .identity {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+.relnet-shell .avatar {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255,255,255,.09);
+  color: var(--v90-sidebar-text);
+}
+.identity-copy { min-width: 0; }
+.identity-copy strong, .identity-copy small {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.identity-copy small { color: var(--v90-sidebar-muted); margin-top: 3px; }
+
+.relnet-shell .workspace {
+  box-sizing: border-box;
+  width: auto;
+  min-height: 100vh;
+  margin-left: var(--v90-sidebar-width);
+  padding: 30px clamp(18px,3vw,44px) 46px;
+  transition: margin-left .2s ease;
+}
+
+.relnet-shell .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  margin: -30px calc(clamp(18px,3vw,44px) * -1) 26px;
+  padding: 28px clamp(18px,3vw,44px) 20px;
+  border-bottom: 1px solid color-mix(in srgb,var(--v90-line) 82%,transparent);
+  background: color-mix(in srgb,var(--v90-bg) 86%,transparent);
+  backdrop-filter: blur(20px);
+}
+
+.relnet-shell .heading-copy { max-width: 780px; }
+.relnet-shell .eyebrow {
+  margin: 0 0 7px;
+  color: var(--v90-muted);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.relnet-shell h1 {
+  margin: 0;
+  color: var(--v90-text);
+  font-size: clamp(1.75rem,3vw,2.65rem);
+  letter-spacing: -.045em;
+}
+.relnet-shell .page-description { max-width: 750px; margin: 8px 0 0; color: var(--v90-muted); line-height: 1.55; }
+
+.relnet-shell .topbar-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.relnet-shell .utility-link,
+.relnet-shell .privacy-badge {
+  min-height: 38px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--v90-line);
+  border-radius: 10px;
+  background: color-mix(in srgb,var(--v90-panel-solid) 82%,transparent);
+  color: var(--v90-muted);
+  text-decoration: none;
+  font-size: .78rem;
+  font-weight: 750;
+}
+
+.relnet-shell .summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(185px,1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.relnet-shell .summary-card,
+.relnet-shell .panel,
+.relnet-shell .banner {
+  border: 1px solid var(--v90-line);
+  background: var(--v90-panel);
+  box-shadow: var(--v90-shadow);
+  backdrop-filter: blur(16px);
+}
+.relnet-shell .summary-card { border-radius: 16px; }
+
+.relnet-shell .module-layout {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(310px,390px);
+  gap: 16px;
+  align-items: start;
+}
+.relnet-shell .panel {
+  border-radius: 18px;
+  overflow: clip;
+}
+.relnet-shell .panel-heading {
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--v90-line);
+}
+.relnet-shell .panel-heading h2 {
+  margin: 4px 0 0;
+  color: var(--v90-text);
+  letter-spacing: -.025em;
+}
+.relnet-shell .panel-heading p { color: var(--v90-muted); }
+.relnet-shell .content { padding: 18px 22px 24px; }
+.relnet-shell .action-panel {
+  position: sticky;
+  top: 126px;
+}
+.relnet-shell .action-panel form { padding: 18px 22px 22px; }
+.relnet-shell .field input,
+.relnet-shell .field select,
+.relnet-shell .field textarea,
+.relnet-shell input,
+.relnet-shell select,
+.relnet-shell textarea {
+  border: 1px solid var(--v90-line-strong);
+  border-radius: 11px;
+  background: var(--v90-panel-solid);
+  color: var(--v90-text);
+}
+.relnet-shell .field input:focus,
+.relnet-shell .field select:focus,
+.relnet-shell .field textarea:focus {
+  outline: 3px solid color-mix(in srgb,var(--v90-accent) 22%,transparent);
+  border-color: var(--v90-accent);
+}
+
+.relnet-shell .button {
+  border-radius: 11px;
+  min-height: 40px;
+}
+.relnet-shell .button.primary {
+  border-color: #111827;
+  background: #111827;
+  color: #fff;
+}
+.relnet-shell .button.secondary {
+  border-color: var(--v90-line);
+  background: color-mix(in srgb,var(--v90-panel-solid) 88%,transparent);
+  color: var(--v90-text);
+}
+.relnet-shell .sidebar .button.secondary {
+  border-color: rgba(255,255,255,.1);
+  background: rgba(255,255,255,.055);
+  color: var(--v90-sidebar-text);
+}
+.relnet-shell kbd {
+  border-color: var(--v90-line);
+  background: var(--v90-panel-2);
+  color: var(--v90-muted);
+}
+.relnet-shell dialog {
+  border: 1px solid var(--v90-line);
+  border-radius: 18px;
+  background: var(--v90-panel-solid);
+  color: var(--v90-text);
+  box-shadow: 0 35px 100px rgba(0,0,0,.24);
+}
+.relnet-shell dialog::backdrop { background: rgba(7,12,20,.55); backdrop-filter: blur(4px); }
+
+body.sidebar-collapsed .sidebar {
+  width: var(--v90-sidebar-compact);
+  min-width: var(--v90-sidebar-compact);
+}
+body.sidebar-collapsed .workspace { margin-left: var(--v90-sidebar-compact); }
+body.sidebar-collapsed .brand-copy,
+body.sidebar-collapsed .environment-card > div,
+body.sidebar-collapsed .sidebar-footer .identity-copy,
+body.sidebar-collapsed .sidebar-footer #logout {
+  display: none !important;
+}
+body.sidebar-collapsed .sidebar-head { justify-content: center; }
+body.sidebar-collapsed .environment-card { grid-template-columns: 1fr; justify-items: center; padding-inline: 8px; }
+body.sidebar-collapsed #navigation a,
+body.sidebar-collapsed #navigation button {
+  overflow: hidden;
+  white-space: nowrap;
+  text-indent: -9999px;
+  position: relative;
+}
+body.sidebar-collapsed #navigation a::before,
+body.sidebar-collapsed #navigation button::before {
+  content: "•";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-indent: 0;
+  font-size: 1.15rem;
+}
+body.sidebar-collapsed .identity { grid-template-columns: 1fr; justify-items: center; }
+
+@media (max-width: 1080px) {
+  .relnet-shell .module-layout { grid-template-columns: 1fr; }
+  .relnet-shell .action-panel { position: static; }
+  .relnet-shell .topbar { align-items: flex-start; flex-direction: column; }
+  .relnet-shell .topbar-actions { justify-content: flex-start; }
+}
+
+@media (max-width: 760px) {
+  .relnet-shell .sidebar {
+    width: min(86vw,310px);
+    min-width: min(86vw,310px);
+    transform: translateX(-102%);
+    box-shadow: 24px 0 60px rgba(0,0,0,.22);
+  }
+  body.sidebar-open .sidebar { transform: translateX(0); }
+  body.sidebar-collapsed .sidebar { width: min(86vw,310px); min-width: min(86vw,310px); }
+  body.sidebar-collapsed .brand-copy,
+  body.sidebar-collapsed .environment-card > div,
+  body.sidebar-collapsed .sidebar-footer .identity-copy,
+  body.sidebar-collapsed .sidebar-footer #logout { display: initial !important; }
+  body.sidebar-collapsed .environment-card { grid-template-columns: auto 1fr; justify-items: initial; }
+  body.sidebar-collapsed #navigation a,
+  body.sidebar-collapsed #navigation button { text-indent: 0; }
+  body.sidebar-collapsed #navigation a::before,
+  body.sidebar-collapsed #navigation button::before { display: none; }
+  .relnet-shell .workspace,
+  body.sidebar-collapsed .workspace { margin-left: 0; padding: 22px 14px 34px; }
+  .relnet-shell .topbar { margin: -22px -14px 20px; padding: 18px 14px 16px; }
+  .relnet-shell .sidebar-toggle {
+    position: fixed;
+    left: 12px;
+    top: 12px;
+    z-index: 55;
+    box-shadow: 0 8px 26px rgba(0,0,0,.18);
+  }
+  body.sidebar-open .sidebar-toggle { position: static; box-shadow: none; }
+  .relnet-shell .heading-copy { padding-left: 48px; }
+  body.sidebar-open .heading-copy { padding-left: 0; }
+  .relnet-shell .utility-link,
+  .relnet-shell .privacy-badge { display: none; }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --v90-bg: #090e15;
+    --v90-panel: rgba(16,24,36,.88);
+    --v90-panel-solid: #111925;
+    --v90-panel-2: #0d141e;
+    --v90-text: #eef3f8;
+    --v90-muted: #97a5b6;
+    --v90-line: #243142;
+    --v90-line-strong: #33445a;
+    --v90-sidebar: #070b11;
+    --v90-sidebar-2: #0d141e;
+    --v90-shadow: 0 22px 60px rgba(0,0,0,.26);
+  }
+  .relnet-shell .button.primary { background: #eef3f8; border-color: #eef3f8; color: #0b1018; }
+  .brand-symbol { background: #eef3f8; color: #0b1018; }
+}
+
+@media (prefers-contrast: more) {
+  .relnet-shell .panel,
+  .relnet-shell .summary-card,
+  .relnet-shell .button,
+  .relnet-shell .field input,
+  .relnet-shell .field select,
+  .relnet-shell .field textarea { border-width: 2px; }
+  .relnet-shell .page-description,
+  .relnet-shell .panel-heading p { color: var(--v90-text); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relnet-shell .sidebar,
+  .relnet-shell .workspace { transition: none; }
+}

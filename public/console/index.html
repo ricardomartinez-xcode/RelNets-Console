@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#0b1020">
+    <meta name="color-scheme" content="light dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="RelNet Console">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/console/manifest.webmanifest">
+    <link rel="icon" href="/console/static/relnet.ico" sizes="any">
+    <link rel="apple-touch-icon" href="/console/static/apple-touch-icon.png">
+    <title>RelNet Console · ReLead</title>
+    <link rel="stylesheet" href="/console/static/styles.css">
+    <link rel="stylesheet" href="/console/static/v90-shell.css">
+  </head>
+  <body class="admin-page relnet-console">
+    <a class="skip-link" href="#main-content">Ir al contenido</a>
+
+    <aside class="sidebar" id="app-sidebar" aria-label="Navegación principal">
+      <div class="sidebar-brand-row">
+        <a class="brand" href="/console/" aria-label="RelNet Console">
+          <img class="brand-logo" src="/console/static/relnet-brand.png" alt="RelNet">
+          <span class="brand-wordmark">Console</span>
+        </a>
+        <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Contraer barra lateral" aria-controls="app-sidebar" aria-expanded="true">
+          <span aria-hidden="true">‹</span>
+        </button>
+      </div>
+
+      <div class="environment-card">
+        <span class="status-dot" id="environment-dot"></span>
+        <div>
+          <small>Entorno activo</small>
+          <strong id="environment">Comprobando…</strong>
+        </div>
+      </div>
+
+      <nav id="navigation" aria-label="Áreas de RelNet Console"></nav>
+
+      <div class="sidebar-links" aria-label="Accesos de cuenta">
+        <a href="/account"><span aria-hidden="true">◎</span><span>Cuenta</span></a>
+        <a href="/billing"><span aria-hidden="true">◇</span><span>Facturación</span></a>
+        <a href="/security/otp"><span aria-hidden="true">⌾</span><span>Seguridad y OTP</span></a>
+        <a href="/developers"><span aria-hidden="true">⌘</span><span>API y MCP</span></a>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="identity">
+          <span class="avatar" id="actor-initial" aria-hidden="true">A</span>
+          <div class="identity-copy"><strong id="actor">Cargando…</strong><small id="role"></small></div>
+        </div>
+        <button id="logout" class="button secondary full-width" type="button">Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <main class="workspace" id="main-content">
+      <header class="topbar">
+        <div class="heading-copy">
+          <p class="eyebrow">
+            <span id="section-name">Resumen</span>
+            <span aria-hidden="true">/</span>
+            <span id="module-state">En vivo</span>
+          </p>
+          <h1 id="title">Estado general</h1>
+          <p id="module-description" class="page-description">Salud, actividad y alertas importantes de tu red privada.</p>
+        </div>
+        <div class="topbar-actions">
+          <a class="utility-link" href="https://relead.com.mx">ReLead.com.mx</a>
+          <a class="utility-link" href="https://relead.com.mx/FAQs" target="_blank" rel="noreferrer">Ayuda</a>
+          <a class="utility-link" href="https://relead.com.mx/install">Instalar</a>
+          <span class="privacy-badge"><span class="status-dot ok"></span>Canal protegido</span>
+          <button id="refresh" class="button secondary" type="button"><span>Actualizar</span><kbd>R</kbd></button>
+        </div>
+      </header>
+
+      <div class="surface-map" aria-label="Superficies ReLead">
+        <span><strong>RelNet Console</strong><small>console.relead.com.mx</small></span>
+        <span><strong>API</strong><small>api.relead.com.mx · backend</small></span>
+        <span><strong>Admin</strong><small>admin.relead.com.mx · administración</small></span>
+      </div>
+
+      <div id="global-alert" class="banner" role="status" aria-live="polite" hidden></div>
+      <section id="summary" class="summary-grid" aria-label="Resumen del módulo"></section>
+
+      <div id="module-layout" class="module-layout">
+        <section class="panel data-panel" aria-labelledby="panel-title">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Información operativa</p>
+              <h2 id="panel-title">Estado general</h2>
+              <p id="panel-subtitle">Datos actuales y redactados de la plataforma.</p>
+            </div>
+            <div class="panel-tools">
+              <label class="search-field" id="search-field" hidden>
+                <span class="sr-only">Filtrar registros</span>
+                <input id="table-filter" type="search" placeholder="Filtrar registros…" autocomplete="off">
+              </label>
+              <span id="last-updated" class="timestamp">Aún no actualizado</span>
+            </div>
+          </div>
+          <div id="content" class="content" aria-live="polite" aria-busy="true"></div>
+        </section>
+
+        <aside id="action-panel" class="panel action-panel" aria-labelledby="action-title">
+          <div class="panel-heading compact">
+            <div>
+              <p class="panel-kicker">Acción administrativa</p>
+              <h2 id="action-title">Ejecutar operación</h2>
+              <p>Revisa el impacto antes de confirmar. Las operaciones sensibles requieren reautenticación.</p>
+            </div>
+          </div>
+          <form id="action-form">
+            <label class="field">Operación<select id="operation"></select></label>
+            <div id="operation-context" class="operation-context"></div>
+            <div id="guided-fields" class="guided-fields"></div>
+            <details class="advanced-input">
+              <summary>Parámetros avanzados JSON</summary>
+              <label class="field" for="parameters">Objeto de parámetros</label>
+              <textarea id="parameters" rows="8" spellcheck="false">{}</textarea>
+              <p>Los campos guiados se combinan con este objeto al ejecutar.</p>
+            </details>
+            <button id="action-submit" class="button primary full-width" type="submit">Revisar y ejecutar</button>
+          </form>
+          <section id="action-output" class="action-output" aria-live="polite" hidden>
+            <div class="result-heading"><strong>Resultado</strong><span id="result-status" class="status-chip neutral">Completado</span></div>
+            <div id="action-links" class="action-links"></div>
+            <div id="action-guidance" class="action-guidance" hidden></div>
+            <pre id="action-result"></pre>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <dialog id="confirmation-dialog" aria-labelledby="confirmation-title">
+      <form id="confirmation-form" method="dialog">
+        <span class="dialog-label">Confirmación de un solo uso</span>
+        <h2 id="confirmation-title">Revisa el impacto</h2>
+        <p id="confirmation-summary">Esta operación requiere confirmación.</p>
+        <div id="confirmation-details" class="confirmation-details"></div>
+        <div class="dialog-actions">
+          <button value="cancel" class="button secondary" type="button" data-dialog-cancel>Cancelar</button>
+          <button id="confirmation-submit" class="button danger" type="submit">Confirmar operación</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="reauth-dialog" aria-labelledby="reauth-title">
+      <form id="reauth-form">
+        <span class="dialog-label">Protección de cuenta</span>
+        <h2 id="reauth-title">Vuelve a confirmar tu identidad</h2>
+        <p>Las acciones sensibles exigen una verificación reciente.</p>
+        <label class="field">Contraseña<input id="reauth-password" type="password" autocomplete="current-password" required></label>
+        <label id="reauth-totp-label" class="field">Código TOTP<input id="reauth-totp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label>
+        <p class="otp-help">¿Aún no tienes OTP? Ve a <a href="/console/?module=security">Seguridad y OTP</a> para iniciar la configuración.</p>
+        <p id="reauth-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button secondary" type="button" data-dialog-cancel>Cancelar</button>
+          <button id="reauth-submit" class="button primary" type="submit">Verificar identidad</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="/console/static/app.js"></script>
+    <script type="module" src="/console/static/v90-shell.js"></script>
+    <script src="/console/static/pwa.js" defer></script>
+    <script src="/console/static/shell-v90.js" defer></script>
+  </body>
+</html>
