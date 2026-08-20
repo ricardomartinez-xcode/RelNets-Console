@@ -75,7 +75,7 @@ test('responsive and basic accessibility contracts are present', async () => {
   assert.match(css, /prefers-reduced-motion/);
 });
 
-test('deprecated app.relead.com.mx is absent from runtime and new console contracts', () => {
+test('deprecated app hostname is absent from runtime and new console contracts', () => {
   for (const file of ['src/index.js','src/policy.js','src/relnet-ui.js','src/relnet-api.js','types/relnet-api.ts']) {
     if (existsSync(new URL(`../${file}`, import.meta.url))) assert.doesNotMatch(read(file), /app\.relead\.com\.mx/);
   }

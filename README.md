@@ -17,3 +17,22 @@ Until the custom domain is reassigned to the Control Web project, this edge **pr
 Backend routes (`/admin/api/*`, `/console/api/*`, `/api/v1/*`, `/relnet/v1/*`, `/auth/*`, `/oauth/*`, `/install/*`, `/ws/*`) continue to go directly to `BACKEND_ORIGIN` (default `https://api.relead.com.mx`). Registration, OTP and billing pages are UI routes and are proxied to Control Web so its CSRF/rendering logic remains authoritative.
 
 This bridge is temporary. The final architecture is to assign `console.relead.com.mx` directly to `ReLead-Control-Web`, then retire the UI-proxy behavior from this repo.
+
+## RelNet Next Console UI
+
+The authenticated human surface is `https://console.relead.com.mx`. This workstream adds fail-closed UI routes under `/console/relnet` without adding networking or backend behavior.
+
+Routes:
+- `/console/relnet`
+- `/console/relnet/controllers`
+- `/console/relnet/nodes`
+- `/console/relnet/edge`
+- `/console/relnet/network`
+- `/console/relnet/installation`
+- `/console/relnet/diagnostics`
+- `/console/relnet/migration`
+- `/console/relnet/ai`
+
+The UI contract is pinned to RelNet Next baseline `6838b2fa375a36a5a2806acc842f115bb69f2061`. Dynamic values remain unavailable until authoritative product endpoints exist. Mutating controls are disabled while their dependencies are `backend-pending`; the UI never synthesizes successful network, migration, installer, or AI state.
+
+Authentication remains an integration boundary of the existing Console front door. The pinned backend baseline does not define a new `/console/relnet` session-validation endpoint, so this task does not invent one. Production exposure must preserve the existing authenticated Console boundary before these routes are promoted.

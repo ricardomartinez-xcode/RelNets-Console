@@ -10,6 +10,8 @@ import {
   normalizeUiOrigin,
   rewriteUiLocation
 } from './policy.js';
+import { isRelnetNextRoute, renderRelnetConsole } from './relnet-ui.js';
+import { RELNET_CSS } from './relnet-styles.js';
 
 const SECURITY_HEADERS = {
   'cache-control': 'no-store',
@@ -126,6 +128,13 @@ export default {
       }
 
       if (url.pathname === '/') return redirect(new URL('/console/', url), 302);
+
+      if (url.pathname === '/console/relnet/assets/ui.css') {
+        return withSecurity(new Response(RELNET_CSS, { status: 200, headers: { 'content-type': 'text/css; charset=utf-8', 'x-relead-surface': 'relnet-next-console' } }));
+      }
+      if (['GET', 'HEAD'].includes(request.method) && isRelnetNextRoute(url.pathname)) {
+        return withSecurity(new Response(renderRelnetConsole(url.pathname), { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'x-relead-surface': 'relnet-next-console' } }));
+      }
 
       // APIs, OAuth/Auth and non-GET legacy login remain backend traffic.
       if (isBackendProxyPath(url.pathname, request.method)) return proxyBackend(request, env);

@@ -26,9 +26,9 @@ test('backend and UI routing are mutually explicit', () => {
 });
 
 test('canonical admin graphical paths stay on RelNet Console', () => {
-  assert.equal(canonicalConsoleUrl('https://app.relead.com.mx/admin').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/?area=admin`);
-  assert.equal(canonicalConsoleUrl('https://app.relead.com.mx/admin/login').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/login?area=admin`);
-  assert.equal(canonicalConsoleUrl('https://app.relead.com.mx/admin/static/app.js').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/static/app.js`);
+  assert.equal(canonicalConsoleUrl('https://console.relead.com.mx/admin').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/?area=admin`);
+  assert.equal(canonicalConsoleUrl('https://console.relead.com.mx/admin/login').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/login?area=admin`);
+  assert.equal(canonicalConsoleUrl('https://console.relead.com.mx/admin/static/app.js').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/static/app.js`);
 });
 
 test('UI upstream defaults to actual control-web alias and cannot equal incoming console origin', () => {
