@@ -1,0 +1,1 @@
+export type SponsorMetric=Readonly<{event:'sponsor_impression'|'sponsor_click'|'ad_slot_available';surface:'account_dashboard';placement:string}>; export type SponsorMetricSink=(metric:SponsorMetric)=>void; export function emitSponsorMetric(metric:SponsorMetric,sink?:SponsorMetricSink){sink?.(metric)}

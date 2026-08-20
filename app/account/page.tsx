@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Surface } from '@/app/components/Surface';
+import { FreePlanSponsor } from '@/app/components/monetization/FreePlanSponsor';
 type Session = { user_id?: string; space_id?: string; network_id?: string; role?: string; mfa_enabled?: boolean; usage?: Record<string, unknown>; plan?: Record<string, unknown> };
 export default function AccountPage() {
   const [data, setData] = useState<Session | null>(null); const [error, setError] = useState('');
@@ -11,5 +12,6 @@ export default function AccountPage() {
       <section className="card stack"><span className="pill">Plan {data.role || 'Free'}</span><div className="metric"><small>User ID</small><strong style={{fontSize:18}}>{data.user_id}</strong></div><div className="metric"><small>Space ID</small><strong style={{fontSize:18}}>{data.space_id}</strong></div><div className="metric"><small>Network ID</small><strong style={{fontSize:18}}>{data.network_id}</strong></div></section>
       <aside className="card flat stack"><h2>Accesos</h2><a className="button secondary" href="/console/">Abrir RelNet Console</a><a className="button secondary" href="/security/otp">Seguridad y TOTP</a><a className="button secondary" href="/billing">Facturación y plan</a><a className="button secondary" href="/developers">API y MCP</a><p className="helper">MFA: {data.mfa_enabled ? 'activo' : 'no configurado'}.</p></aside>
     </div>}
+    {data ? <FreePlanSponsor surface="account_dashboard" plan={String(data.plan?.slug || data.role || "")} placement="account_after_identity" /> : null}
   </Surface>;
 }
