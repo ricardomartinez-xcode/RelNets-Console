@@ -55,7 +55,7 @@ export async function sessionSummary(request: NextRequest): Promise<NextResponse
     csrf,
     plan,
     usage: billing.usage || {},
-    billing_state: billing.billing_state || null,
+    billing_state: billing.billing || null,
   });
   if (!request.cookies.get(CSRF_COOKIE)?.value) {
     result.cookies.set(CSRF_COOKIE, csrf, { httpOnly: true, secure: cookieSecure(), sameSite: 'strict', path: '/', maxAge: 60 * 60 * 12 });
