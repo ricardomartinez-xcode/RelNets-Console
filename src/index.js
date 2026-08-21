@@ -10,7 +10,7 @@ import {
   normalizeUiOrigin,
   rewriteUiLocation
 } from './policy.js';
-import { isRelnetNextRoute, renderRelnetConsole } from './relnet-ui.js';
+import { isLocalProductConsoleRoute, renderRelnetConsole } from './relnet-ui.js';
 import { RELNET_CSS } from './relnet-styles.js';
 
 const SECURITY_HEADERS = {
@@ -132,7 +132,7 @@ export default {
       if (url.pathname === '/console/relnet/assets/ui.css') {
         return withSecurity(new Response(RELNET_CSS, { status: 200, headers: { 'content-type': 'text/css; charset=utf-8', 'x-relead-surface': 'relnet-next-console' } }));
       }
-      if (['GET', 'HEAD'].includes(request.method) && isRelnetNextRoute(url.pathname)) {
+      if (['GET', 'HEAD'].includes(request.method) && isLocalProductConsoleRoute(url.pathname)) {
         return withSecurity(new Response(renderRelnetConsole(url.pathname), { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'x-relead-surface': 'relnet-next-console' } }));
       }
 

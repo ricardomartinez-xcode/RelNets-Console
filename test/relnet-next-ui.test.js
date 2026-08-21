@@ -10,7 +10,7 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 const request = (path) => new Request(`https://console.relead.com.mx${path}`, { headers: { accept: 'text/html' } });
 
 test('RelNet Next console route map is served locally, not proxied as legacy UI', async () => {
-  const expected = ['/console/relnet','/console/relnet/controllers','/console/relnet/nodes','/console/relnet/edge','/console/relnet/network','/console/relnet/installation','/console/relnet/diagnostics','/console/relnet/migration','/console/relnet/ai'];
+  const expected = ['/console/relnet','/console/relnet/controllers','/console/relnet/nodes','/console/relnet/edge','/console/relnet/network','/console/relnet/access','/console/relnet/installation','/console/relnet/diagnostics','/console/relnet/migration','/console/relnet/ai'];
   assert.deepEqual(RELNET_NEXT_ROUTES, expected);
   for (const route of expected) {
     const response = await worker.fetch(request(route), {});
@@ -23,8 +23,8 @@ test('RelNet Next console route map is served locally, not proxied as legacy UI'
 test('console contains every required operational surface without fabricated live values', async () => {
   const response = await worker.fetch(request('/console/relnet'), {});
   const html = await response.text();
-  for (const label of ['Fleet','Controllers','Nodes','Edge','Network','Installation','Diagnostics','Migration','AI-Coordinator']) assert.match(html, new RegExp(label, 'i'));
-  for (const term of ['topology generation','active-active','NetworkMap','Control Stream','Service Stream','RelDrop','RelShare','rollback','GGUF']) assert.match(html, new RegExp(term, 'i'));
+  for (const label of ['Fleet','Controllers','Nodes','Edge','Network','Access','Installation','Diagnostics','Migration','RelNet AI']) assert.match(html, new RegExp(label, 'i'));
+  for (const term of ['topology generation','active-active','NetworkMap','Control Stream','RelDrop','RelShare','rollback','server-side']) assert.match(html, new RegExp(term, 'i'));
   assert.match(html, /Backend dependency|Backend pendiente/i);
   assert.doesNotMatch(html, /100% healthy|all systems operational|migration complete/i);
 });
@@ -41,7 +41,7 @@ test('mandatory UI states are explicit and retry is accessible', async () => {
 test('typed API contract and backend dependency matrix exist and remain fail-closed', () => {
   assert.equal(existsSync(new URL('../types/relnet-api.ts', import.meta.url)), true);
   const typed = read('types/relnet-api.ts');
-  for (const name of ['FleetSnapshot','ControllerSnapshot','NodeSnapshot','EdgeServiceSnapshot','InstallationSnapshot','DiagnosticsSnapshot','MigrationSnapshot','AiCoordinatorSnapshot']) assert.match(typed, new RegExp(`interface ${name}`));
+  for (const name of ['FleetSnapshot','ControllerSnapshot','NodeSnapshot','EdgeServiceSnapshot','AccessSnapshot','InstallationSnapshot','DiagnosticsSnapshot','MigrationSnapshot','BillingSnapshot','AiEntitlementSnapshot','AiUsageSnapshot']) assert.match(typed, new RegExp(`interface ${name}`));
   assert.ok(BACKEND_DEPENDENCIES.length >= 8);
   for (const dep of BACKEND_DEPENDENCIES) {
     assert.equal(dep.available, false, dep.id);
@@ -49,11 +49,11 @@ test('typed API contract and backend dependency matrix exist and remain fail-clo
   }
 });
 
-test('AI Coordinator inventory is factual but runtime status is not invented', async () => {
+test('product AI is customer-safe and runtime truth is not invented', async () => {
   const html = await (await worker.fetch(request('/console/relnet/ai'), {})).text();
-  for (const fact of ['AI-Coordinator','100.65.98.26','Ubuntu 26.04','x86_64','4 vCPU','7.6 GiB','~70 GiB','NVIDIA: none']) assert.match(html, new RegExp(fact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  for (const field of ['worker status','assigned jobs','model status','tokens/sec','readiness','error state']) assert.match(html, new RegExp(field, 'i'));
+  for (const field of ['Effective plan','Subscription','AI included','Revenue gate','AI Credits','Usage','Remaining']) assert.match(html, new RegExp(field, 'i'));
   assert.match(html, /sin endpoint|backend pendiente/i);
+  assert.doesNotMatch(html, /GGUF|RunPod|Qwen|tokens\/sec/i);
 });
 
 test('migration UI exposes rollback and cutover but never legacy deletion', async () => {

@@ -6,30 +6,34 @@ export class BackendDependencyError extends Error {
   }
 }
 
-export const BACKEND_DEPENDENCIES = Object.freeze([
-  { id: 'fleet.read', method: 'GET', path: '/console/api/relnet-next/fleet', available: false, status: 'backend-pending', owner: 'Control Plane' },
-  { id: 'controllers.read', method: 'GET', path: '/console/api/relnet-next/controllers', available: false, status: 'backend-pending', owner: 'Control Plane' },
-  { id: 'controllers.drain', method: 'POST', path: '/console/api/relnet-next/controllers/{controller_id}/drain', available: false, status: 'backend-pending', owner: 'Control Plane' },
-  { id: 'nodes.read', method: 'GET', path: '/console/api/relnet-next/nodes', available: false, status: 'backend-pending', owner: 'Control Plane / Endpoint' },
-  { id: 'edge.read', method: 'GET', path: '/console/api/relnet-next/edge', available: false, status: 'backend-pending', owner: 'Control Plane / Edge' },
-  { id: 'network.read', method: 'GET', path: '/console/api/relnet-next/network', available: false, status: 'backend-pending', owner: 'Control Plane / Edge' },
-  { id: 'installation.read', method: 'GET', path: '/console/api/relnet-next/installation', available: false, status: 'backend-pending', owner: 'Endpoint / Installer' },
-  { id: 'installation.action', method: 'POST', path: '/console/api/relnet-next/installation/{device_id}/actions', available: false, status: 'backend-pending', owner: 'Endpoint / Installer' },
-  { id: 'diagnostics.read', method: 'GET', path: '/console/api/relnet-next/diagnostics', available: false, status: 'backend-pending', owner: 'Control Plane / Endpoint' },
-  { id: 'migration.read', method: 'GET', path: '/console/api/relnet-next/migration', available: false, status: 'backend-pending', owner: 'Coordinator' },
-  { id: 'migration.cutover', method: 'POST', path: '/console/api/relnet-next/migration/cutover', available: false, status: 'backend-pending', owner: 'Coordinator' },
-  { id: 'ai.read', method: 'GET', path: '/console/api/relnet-next/ai/coordinator', available: false, status: 'backend-pending', owner: 'AI / Builder' }
+const pending=(id,method,path,owner)=>({id,method,path,available:false,status:'backend-pending',owner});
+
+export const BACKEND_DEPENDENCIES=Object.freeze([
+  pending('fleet.read','GET','/console/api/relnet-next/fleet','Control Plane'),
+  pending('controllers.read','GET','/console/api/relnet-next/controllers','Control Plane'),
+  pending('controllers.drain','POST','/console/api/relnet-next/controllers/{controller_id}/drain','Control Plane'),
+  pending('nodes.read','GET','/console/api/relnet-next/nodes','Control Plane / Endpoint'),
+  pending('edge.read','GET','/console/api/relnet-next/edge','Control Plane / Edge'),
+  pending('network.read','GET','/console/api/relnet-next/network','Control Plane / Edge'),
+  pending('access.read','GET','/console/api/relnet-next/access','Product API / Endpoint'),
+  pending('installation.read','GET','/console/api/relnet-next/installation','Endpoint / Installer'),
+  pending('installation.action','POST','/console/api/relnet-next/installation/{device_id}/actions','Endpoint / Installer'),
+  pending('diagnostics.read','GET','/console/api/relnet-next/diagnostics','Control Plane / Endpoint'),
+  pending('migration.read','GET','/console/api/relnet-next/migration','Coordinator'),
+  pending('migration.cutover','POST','/console/api/relnet-next/migration/cutover','Coordinator'),
+  pending('billing.read','GET','/console/api/relnet-next/billing','Product API / Commercial'),
+  pending('ai.entitlement.read','GET','/console/api/relnet-next/ai/entitlement','Product API / Commercial'),
+  pending('ai.usage.read','GET','/console/api/relnet-next/ai/usage','Product API / Commercial'),
+  pending('ai.execute','POST','/console/api/relnet-next/ai/execute','Product API / AI')
 ]);
 
-export function dependencyById(id) {
-  return BACKEND_DEPENDENCIES.find((dependency) => dependency.id === id) || null;
-}
+export function dependencyById(id){return BACKEND_DEPENDENCIES.find(d=>d.id===id)||null}
 
-export async function loadRelnetResource(id, fetcher = fetch) {
-  const dependency = dependencyById(id);
-  if (!dependency) throw new TypeError(`Unknown RelNet Console dependency: ${id}`);
-  if (!dependency.available) throw new BackendDependencyError(dependency);
-  const response = await fetcher(dependency.path, { headers: { accept: 'application/json' }, credentials: 'same-origin' });
-  if (!response.ok) throw new Error(`RelNet Console backend returned ${response.status}`);
+export async function loadRelnetResource(id,fetcher=fetch){
+  const dependency=dependencyById(id);
+  if(!dependency) throw new TypeError(`Unknown RelNet Console dependency: ${id}`);
+  if(!dependency.available) throw new BackendDependencyError(dependency);
+  const response=await fetcher(dependency.path,{headers:{accept:'application/json'},credentials:'same-origin'});
+  if(!response.ok) throw new Error(`RelNet Console backend returned ${response.status}`);
   return response.json();
 }
