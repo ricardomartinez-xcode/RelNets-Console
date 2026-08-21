@@ -39,7 +39,7 @@ export function isConsoleUiPath(path) {
 }
 
 export function canonicalConsoleUrl(value, origin = CANONICAL_CONSOLE_ORIGIN) {
-  const source = value instanceof URL ? new URL(value) : new URL(String(value), 'https://app.relead.com.mx');
+  const source = value instanceof URL ? new URL(value) : new URL(String(value), CANONICAL_CONSOLE_ORIGIN);
   const target = new URL('/console/', origin);
 
   if (source.pathname.startsWith('/console/')) target.pathname = source.pathname;

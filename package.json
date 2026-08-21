@@ -1,1 +1,20 @@
-{"name":"@relead/app","version":"0.1.0","private":true,"type":"module","description":"Authenticated Cloudflare web application for RelNet v90.","scripts":{"test":"node --test","check":"npm test && npx wrangler deploy --dry-run","deploy":"wrangler deploy"},"devDependencies":{"wrangler":"4.30.0"}}
+{
+  "name": "@relead/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Authenticated Cloudflare web application for RelNet v90.",
+  "scripts": {
+    "test": "node --test",
+    "check": "npm test && npm run build:worker",
+    "deploy": "wrangler deploy",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "build:worker": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "typescript": "^6.0.2",
+    "wrangler": "4.30.0"
+  }
+}
