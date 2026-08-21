@@ -6,11 +6,11 @@
   "description": "Authenticated Cloudflare web application for RelNet v90.",
   "scripts": {
     "test": "node --test",
-    "check": "npm test && npx wrangler deploy --dry-run",
+    "check": "npm test && npm run build:worker",
     "deploy": "wrangler deploy",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "build": "wrangler deploy --dry-run"
+    "build:worker": "wrangler deploy --dry-run"
   },
   "devDependencies": {
     "eslint": "^9.39.5",
