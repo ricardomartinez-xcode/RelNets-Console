@@ -9,29 +9,28 @@ import {
   isConsoleUiPath,
   normalizeOrigin,
   normalizeUiOrigin,
-  rewriteUiLocation
+  rewriteUiLocation,
 } from '../src/policy.js';
 
-test('backend and UI routing are mutually explicit', () => {
-  for (const path of ['/admin/api/session', '/console/api/modules/relnet', '/api/v1/billing/plans', '/relnet/v1/nodes', '/auth/register', '/oauth/authorize', '/install/downloads/linux', '/ws/terminal']) {
+test('legacy backend prefixes remain explicit while local user Console routes are not proxied UI', () => {
+  for (const path of ['/admin/api/session','/console/api/modules/relnet','/api/v1/billing/plans','/relnet/v1/nodes','/install/downloads/linux','/ws/terminal']) {
     assert.equal(isBackendProxyPath(path, 'GET'), true, path);
   }
   assert.equal(isBackendProxyPath('/console/login', 'POST'), true);
   assert.equal(isBackendProxyPath('/console/login', 'GET'), false);
-  for (const path of ['/console/', '/console/login', '/register', '/security/otp', '/security/otp/setup', '/billing']) {
-    assert.equal(isConsoleUiPath(path), true, path);
+  for (const path of ['/console','/console/network','/console/nodes','/console/access','/console/billing']) {
+    assert.equal(isConsoleUiPath(path), false, path);
   }
-  assert.equal(isConsoleUiPath('/console/api/session'), false);
-  assert.equal(isConsoleUiPath('/auth/register'), false);
+  assert.equal(isConsoleUiPath('/register'), true);
+  assert.equal(isConsoleUiPath('/security/otp'), true);
 });
 
-test('canonical admin graphical paths stay on RelNet Console', () => {
-  assert.equal(canonicalConsoleUrl('https://console.relead.com.mx/admin').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/?area=admin`);
-  assert.equal(canonicalConsoleUrl('https://console.relead.com.mx/admin/login').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/login?area=admin`);
-  assert.equal(canonicalConsoleUrl('https://console.relead.com.mx/admin/static/app.js').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/static/app.js`);
+test('canonical Console URL keeps user paths on console.relead.com.mx', () => {
+  assert.equal(canonicalConsoleUrl('https://console.relead.com.mx/console/network').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/network`);
+  assert.equal(canonicalConsoleUrl('https://example.invalid/console/nodes?limit=20').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/nodes?limit=20`);
 });
 
-test('UI upstream defaults to actual control-web alias and cannot equal incoming console origin', () => {
+test('UI upstream remains a distinct HTTPS compatibility origin', () => {
   assert.equal(normalizeUiOrigin(), DEFAULT_CONSOLE_UI_ORIGIN);
   assert.equal(normalizeUiOrigin('https://admin.relead.com.mx/path'), DEFAULT_CONSOLE_UI_ORIGIN);
   assert.throws(() => normalizeUiOrigin('http://admin.relead.com.mx'), /HTTPS/);
@@ -39,18 +38,14 @@ test('UI upstream defaults to actual control-web alias and cannot equal incoming
   assert.doesNotThrow(() => assertDistinctUiOrigin(CANONICAL_CONSOLE_ORIGIN, DEFAULT_CONSOLE_UI_ORIGIN));
 });
 
-test('UI Location headers are rewritten back to canonical console host only for UI upstream', () => {
+test('legacy UI redirects are rewritten only when they point to the configured UI origin', () => {
   assert.equal(
-    rewriteUiLocation('https://admin.relead.com.mx/console/login?next=%2Fbilling', CANONICAL_CONSOLE_ORIGIN, DEFAULT_CONSOLE_UI_ORIGIN),
-    'https://console.relead.com.mx/console/login?next=%2Fbilling'
-  );
-  assert.equal(
-    rewriteUiLocation('/security/otp', CANONICAL_CONSOLE_ORIGIN, DEFAULT_CONSOLE_UI_ORIGIN),
-    'https://console.relead.com.mx/security/otp'
+    rewriteUiLocation('https://admin.relead.com.mx/security/otp?next=%2Fbilling', CANONICAL_CONSOLE_ORIGIN, DEFAULT_CONSOLE_UI_ORIGIN),
+    'https://console.relead.com.mx/security/otp?next=%2Fbilling',
   );
   assert.equal(
     rewriteUiLocation('https://accounts.google.com/o/oauth2/v2/auth', CANONICAL_CONSOLE_ORIGIN, DEFAULT_CONSOLE_UI_ORIGIN),
-    'https://accounts.google.com/o/oauth2/v2/auth'
+    'https://accounts.google.com/o/oauth2/v2/auth',
   );
 });
 
