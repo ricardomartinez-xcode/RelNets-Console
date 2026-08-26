@@ -1,42 +1,104 @@
-import { BACKEND_DEPENDENCIES } from './relnet-api.js';
-
-export const RELNET_NEXT_ROUTES=Object.freeze([
-  '/console/relnet','/console/relnet/controllers','/console/relnet/nodes','/console/relnet/edge',
-  '/console/relnet/network','/console/relnet/access','/console/relnet/installation',
-  '/console/relnet/diagnostics','/console/relnet/migration','/console/relnet/ai'
+export const RELNET_NEXT_ROUTES = Object.freeze([
+  '/console',
+  '/console/network',
+  '/console/nodes',
+  '/console/access',
+  '/console/billing',
 ]);
-export const LOCAL_PRODUCT_ROUTES=Object.freeze([...RELNET_NEXT_ROUTES,'/billing']);
-export const UI_STATES=Object.freeze(['loading','empty','offline','partial','degraded','blocked','error','retry','permission-denied','unsupported']);
-export const PRODUCT_AI_PLAN_CONTRACT=Object.freeze({
-  free:{included:false,monthlyCredits:0,pool:'space'},
-  pro:{included:true,monthlyCredits:100,pool:'space'},
-  team:{included:true,monthlyCredits:500,pool:'team'},
-  business:{included:true,monthlyCredits:null,pool:'contract'}
-});
 
-const NAV=[['Fleet','/console/relnet'],['Controllers','/console/relnet/controllers'],['Nodes','/console/relnet/nodes'],['Edge','/console/relnet/edge'],['Network','/console/relnet/network'],['Access','/console/relnet/access'],['Installation','/console/relnet/installation'],['Diagnostics','/console/relnet/diagnostics'],['Migration','/console/relnet/migration'],['RelNet AI','/console/relnet/ai'],['Billing','/billing']];
-const UNKNOWN='<span class="valueUnknown">Sin endpoint</span>';
-const dep=id=>BACKEND_DEPENDENCIES.find(x=>x.id===id);
-const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-export function isRelnetNextRoute(path){return RELNET_NEXT_ROUTES.includes(path.replace(/\/$/,'')||'/')}
-export function isLocalProductConsoleRoute(path){return LOCAL_PRODUCT_ROUTES.includes(path.replace(/\/$/,'')||'/')}
-function dependency(id){const d=dep(id);return `<div class="dependency" role="status"><strong>Backend pendiente · ${esc(id)}</strong><span>Server-side dependency: ${esc(d?.method||'GET')} ${esc(d?.path||'sin ruta')}. La UI permanece fail-closed y no simula estado live.</span></div>`}
-function kv(rows){return `<ul class="list">${rows.map(([k,v])=>`<li><span>${k}</span><span>${v}</span></li>`).join('')}</ul>`}
-function metric(t){return `<article class="card metric span4"><span class="kicker">${t}</span><strong>${UNKNOWN}</strong><small>Server-side truth</small></article>`}
-function actions(labels,id){return `<div class="actions" aria-label="Acciones no disponibles">${labels.map(x=>`<button class="button" type="button" disabled title="Backend pendiente: ${id}">${x}</button>`).join('')}</div>`}
-function fleet(){return `<section class="grid">${['Topology generation','Controllers online','Nodes online','Edge services','Warnings','Readiness'].map(metric).join('')}<article class="card span8"><span class="kicker">Fleet</span><h2>Estado global</h2>${kv([['Migration status',UNKNOWN],['Rollback readiness',UNKNOWN],['NetworkMap',UNKNOWN],['A/B/C equal active-active',UNKNOWN],['Future Controller D',UNKNOWN],['Blockers',UNKNOWN]])}${dependency('fleet.read')}</article><article class="card span4"><h2>Control plane</h2><p>A, B y C son participantes iguales active-active. D se incorpora como cuarto participante igual cuando exista evidencia de join.</p><p class="contractNote">Control Stream y NetworkMap son control; el payload de usuario no pasa por controllers.</p><h3>Service Stream</h3><p>Access incluye SSH, Terminal, RDP, RelDrop y RelShare sobre paths direct / peer relay / RelNet relay autorizados server-side.</p></article></section>`}
-function controllers(){const rows=['Controller A','Controller B','Controller C','Controller D'].map((n,i)=>`<tr><td>${n}${i===3?' <span class="badge subtle">future</span>':''}</td><td>${UNKNOWN}</td><td>${UNKNOWN}</td><td>${UNKNOWN}</td><td>${UNKNOWN}</td><td>${UNKNOWN}</td><td>${UNKNOWN}</td></tr>`).join('');return `<section class="grid"><article class="card span12"><span class="kicker">Controllers</span><h2>A · B · C · D como iguales active-active</h2><p>La UI no asigna privilegios permanentes por nombre. Placement, lease y generation vienen del servidor.</p><div class="tableWrap"><table><caption>Equal controller fleet</caption><thead><tr><th>Controller</th><th>Health</th><th>Connectivity</th><th>DB</th><th>Placement</th><th>Lease / generation</th><th>Last seen</th></tr></thead><tbody>${rows}</tbody></table></div>${actions(['Drain','Diagnostics'],'controllers.drain')}${dependency('controllers.read')}</article></section>`}
-function nodes(){return `<section class="grid"><article class="card span12"><span class="kicker">Nodes</span><h2>Endpoint inventory</h2><p>Cada NetworkMap está acotado por device, Space y network. El path observado es direct, peer relay o RelNet relay.</p><div class="tableWrap"><table><caption>RelNet Next nodes</caption><thead><tr><th>Node</th><th>Device ID</th><th>OS / architecture</th><th>Capabilities</th><th>Version</th><th>Online</th><th>Path</th><th>Gateway</th><th>Subnet</th><th>Health</th><th>Last seen</th></tr></thead><tbody><tr><td colspan="11">Sin datos: backend pendiente.</td></tr></tbody></table></div>${dependency('nodes.read')}</article></section>`}
-function edge(){return `<section class="grid"><article class="card span4"><span class="kicker">Edge</span><h2>Relay</h2>${kv([['Service identity',UNKNOWN],['Host',UNKNOWN],['Health',UNKNOWN],['Capacity',UNKNOWN],['Load',UNKNOWN],['State / draining',UNKNOWN],['NetworkMap status',UNKNOWN]])}</article><article class="card span4"><span class="kicker">Edge</span><h2>Gateway</h2>${kv([['Service identity',UNKNOWN],['Health',UNKNOWN],['State / draining',UNKNOWN],['Authorized prefixes',UNKNOWN],['Capacity contract','Pending before shared multi-Space egress']])}</article><article class="card span4"><span class="kicker">Egress</span><h2>Exit</h2>${kv([['Gateway selection',UNKNOWN],['Health',UNKNOWN],['Capacity',UNKNOWN],['Blockers',UNKNOWN]])}</article><article class="card span4"><span class="kicker">Routing</span><h2>Subnet</h2>${kv([['Advertisements',UNKNOWN],['Authorized prefixes',UNKNOWN],['Health',UNKNOWN],['Blockers',UNKNOWN]])}</article><article class="card span8"><h2>Shared capacity</h2><p>Relay admission usa health/capacity/draining del contrato firmado. La capacidad compartida debe conservar headroom medido y aislamiento por Space. Gateway capacity/health permanece contract pending: la UI no inventa disponibilidad.</p>${dependency('edge.read')}</article></section>`}
-function network(){return `<section class="grid"><article class="card span8"><span class="kicker">Network</span><h2>Path selection y egress</h2>${kv([['Direct P2P',UNKNOWN],['Peer Relay',UNKNOWN],['RelNet Relay fallback',UNKNOWN],['Exit Node selection',UNKNOWN],['Gateway selection',UNKNOWN],['Subnet routing',UNKNOWN],['Internet egress',UNKNOWN],['Status and blockers',UNKNOWN]])}${dependency('network.read')}</article><article class="card span4"><span class="kicker">Frozen order</span><h2>Connectivity preference</h2><ol><li>Direct P2P</li><li>Approved Peer Relay</li><li>RelNet Relay fallback</li></ol><p>La selección se deriva del NetworkMap firmado, nunca de flags del browser.</p></article><article class="card span12"><h3>NetworkMap</h3>${kv([['Generation',UNKNOWN],['Expiry',UNKNOWN],['Subject device',UNKNOWN],['Space / network',UNKNOWN],['Map health',UNKNOWN]])}</article></section>`}
-function access(){const services=[['SSH / Terminal','Sesión terminal autorizada sobre Service Stream.'],['RDP','Acceso remoto autorizado sin exponer un puerto público por defecto.'],['RelDrop','Transferencia de archivos sobre el path autorizado.'],['RelShare','Compartición persistente sujeta a grants.']];return `<section class="grid">${services.map(([name,desc])=>`<article class="card span4"><span class="kicker">Access</span><h2>${name}</h2><p>${desc}</p>${kv([['Target',UNKNOWN],['Authorization',UNKNOWN],['Path',UNKNOWN],['Health',UNKNOWN]])}</article>`).join('')}<article class="card span8"><h2>Path + authorization</h2><p>La autorización se resuelve server-side. Una sesión aceptada puede usar direct, Peer Relay o RelNet Relay; la Console no decide placement ni confía en entitlements enviados por el browser.</p>${dependency('access.read')}</article><article class="card span4"><h2>Fail-closed</h2><p>Sin ticket, grant o endpoint autoritativo, los controles permanecen deshabilitados.</p>${actions(['Open SSH','Open Terminal','Open RDP','Send with RelDrop'],'access.read')}</article></section>`}
-function installation(){return `<section class="grid"><article class="card span8"><span class="kicker">Installation</span><h2>Lifecycle</h2>${kv([['Installed version',UNKNOWN],['Target version',UNKNOWN],['Operation progress',UNKNOWN],['Errors',UNKNOWN],['Rollback readiness',UNKNOWN]])}${actions(['Install','Update','Repair','Doctor','Uninstall'],'installation.action')}${dependency('installation.read')}</article><article class="card span4"><h2>Fail-closed</h2><p>Las mutaciones están deshabilitadas hasta disponer de endpoint, autorización y estado server-side.</p></article></section>`}
-function diagnostics(){const rows=[['Local API','Unix socket / Named Pipe'],['Control Stream','heartbeat · health · NetworkMap'],['Service Stream','direct · peer_relay · relnet_relay'],['NetworkMap generation / expiry','signed map'],['Relay','Edge descriptor'],['SSH / Terminal','service stream'],['RDP','service stream'],['RelDrop','service stream'],['RelShare','service stream']];return `<section class="grid"><article class="card span12"><span class="kicker">Diagnostics</span><h2>Cross-plane diagnostics</h2><div class="tableWrap"><table><caption>Diagnostic surfaces</caption><thead><tr><th>Surface</th><th>Status</th><th>Contract</th></tr></thead><tbody>${rows.map(([n,c])=>`<tr><td>${n}</td><td>${UNKNOWN}</td><td>${c}</td></tr>`).join('')}</tbody></table></div>${dependency('diagnostics.read')}</article></section>`}
-function migration(){return `<section class="grid"><article class="card span12"><span class="kicker">Migration</span><h2>Legacy RelNet → RelNet Next</h2><div class="flow"><div class="flowNode"><strong>Legacy RelNet</strong>${kv([['Current legacy state',UNKNOWN],['Host migration status',UNKNOWN]])}</div><div class="flowArrow" aria-hidden="true">→</div><div class="flowNode"><strong>RelNet Next</strong>${kv([['Next readiness',UNKNOWN],['Cutover status',UNKNOWN]])}</div></div>${kv([['Blockers',UNKNOWN],['Rollback availability',UNKNOWN]])}${dependency('migration.read')}<p class="contractNote">Esta UI no contiene ningún control para retirar Legacy. Ese paso requiere autorización separada.</p></article></section>`}
-function planCards(){const labels={free:'Free',pro:'Pro',team:'Team',business:'Business'};return `<div class="planGrid">${Object.entries(PRODUCT_AI_PLAN_CONTRACT).map(([slug,p])=>`<article class="planCard"><span class="kicker">${labels[slug]}</span><h3>${p.included?'RelNet AI incluido':'RelNet AI no incluido'}</h3><strong>${p.monthlyCredits===null?'Cuota contractual':`${p.monthlyCredits} AI Credits / mes`}</strong><p>${p.pool==='team'?'Pool compartido del Team.':p.pool==='contract'?'Cuota configurable por contrato; nunca se asume ilimitada.':'Créditos del Space.'}</p></article>`).join('')}</div>`}
-function ai(){return `<section class="grid"><article class="card span8"><span class="kicker">RelNet AI</span><h2>Entitlement y status</h2>${kv([['Effective plan',UNKNOWN],['Subscription',UNKNOWN],['AI included',UNKNOWN],['Revenue gate',UNKNOWN],['Readiness',UNKNOWN],['Blockers',UNKNOWN]])}${dependency('ai.entitlement.read')}</article><article class="card span4"><span class="kicker">Usage</span><h2>AI Credits</h2>${kv([['Monthly allocation',UNKNOWN],['Reserved',UNKNOWN],['Usage / consumed',UNKNOWN],['Remaining',UNKNOWN]])}${dependency('ai.usage.read')}</article><article class="card span12"><h2>Contrato por plan</h2><p>La Console muestra el contrato de créditos; la elegibilidad efectiva y el usage siempre vienen server-side. No existe conversión contractual de AI Credits a unidades de proveedor.</p>${planCards()}</article><article class="card span12"><h2>Execution gate</h2><p>Free permanece bloqueado. Pro, Team y Business requieren subscription activa del propio Space; además el servidor aplica el revenue gate global. La UI no puede abrir ese gate.</p>${actions(['Start AI request'],'ai.execute')}</article></section>`}
-function billing(){return `<section class="grid"><article class="card span8"><span class="kicker">Billing</span><h2>Subscription</h2>${kv([['Effective plan',UNKNOWN],['Subscription status',UNKNOWN],['Paid active',UNKNOWN],['Billing period',UNKNOWN]])}${dependency('billing.read')}</article><article class="card span4"><span class="kicker">AI usage</span><h2>Credits</h2>${kv([['Entitlement',UNKNOWN],['Monthly allocation',UNKNOWN],['Usage',UNKNOWN],['Remaining',UNKNOWN]])}${dependency('ai.usage.read')}</article><article class="card span12"><h2>AI por plan</h2><p>La verdad de plan/subscription/credits se obtiene server-side. Los precios no se duplican aquí mientras el contrato comercial integrado del ciclo esté pendiente de reconciliación.</p>${planCards()}</article></section>`}
-const VIEWS={controllers,nodes,edge,network,access,installation,diagnostics,migration,ai,billing};
-function keyFor(path){const p=path.replace(/\/$/,'');if(p==='/billing') return 'billing';return p==='/console/relnet'?'fleet':p.split('/').at(-1)}
-function states(){return `<details class="card span12"><summary>UI state contract</summary><div class="stateGrid" aria-live="polite">${UI_STATES.map(s=>`<div class="stateItem" data-ui-state="${s}">${s}</div>`).join('')}</div><form method="get" class="actions"><button class="button" type="submit" data-retry>Reintentar</button></form></details>`}
-export function renderRelnetConsole(pathname){const clean=pathname.replace(/\/$/,'');const key=keyFor(clean);const title=key==='fleet'?'Fleet':NAV.find(([,h])=>h===clean)?.[0]||'RelNet Next';const body=key==='fleet'?fleet():(VIEWS[key]?.()||fleet());const nav=NAV.map(([label,href])=>`<a href="${href}"${href===clean?' aria-current="page"':''}>${label}</a>`).join('');return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${title} · RelNet Next Console</title><link rel="stylesheet" href="/console/relnet/assets/ui.css"></head><body><a class="skip" href="#main-content">Saltar al contenido</a><div class="app"><aside class="sidebar"><div class="brand"><span class="mark">R</span><span><strong>RelNet Next</strong><small>Console</small></span></div><nav class="nav" aria-label="RelNet Next navigation">${nav}</nav><div class="sidebarFoot"><small>Truth model</small><strong>Server-side</strong><small>UI fail-closed</small></div></aside><div class="workspace"><header class="topbar"><div class="breadcrumbs"><span>Console</span><span>/</span><strong>${title}</strong></div><div class="topmeta"><span class="badge">Backend pendiente</span><span>console.relead.com.mx</span></div></header><main class="content" id="main-content"><div class="hero"><div><span class="eyebrow">Authenticated product Console</span><h1>${title}</h1><p>RelNet Next consume verdad server-side. La UI no implementa networking, no confía en flags del browser y no presenta dependencias pendientes como live.</p></div></div>${body}<section class="grid">${states()}</section></main><footer class="footer">ReLead · RelNet Next Console · contract-driven · fail-closed</footer></div></div></body></html>`}
+export const LOCAL_PRODUCT_ROUTES = RELNET_NEXT_ROUTES;
+export const UI_STATES = Object.freeze(['loading','empty','offline','partial','degraded','blocked','error','retry','permission-denied','unsupported']);
+
+const NAV = [
+  ['Resumen', '/console'],
+  ['Mi red', '/console/network'],
+  ['Mis nodos', '/console/nodes'],
+  ['Acceso', '/console/access'],
+  ['Billing', '/console/billing'],
+];
+
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+
+export function isRelnetNextRoute(path) {
+  const clean = path.replace(/\/$/, '') || '/';
+  return RELNET_NEXT_ROUTES.includes(clean);
+}
+
+export function isLocalProductConsoleRoute(path) {
+  return isRelnetNextRoute(path);
+}
+
+function routeKey(pathname) {
+  const clean = pathname.replace(/\/$/, '') || '/console';
+  if (clean === '/console/network') return 'network';
+  if (clean === '/console/nodes') return 'nodes';
+  if (clean === '/console/access') return 'access';
+  if (clean === '/console/billing') return 'billing';
+  return 'overview';
+}
+
+function titleFor(key) {
+  return ({overview:'Resumen',network:'Mi red',nodes:'Mis nodos',access:'Acceso',billing:'Billing'})[key] || 'RelNet';
+}
+
+function endpointFor(key) {
+  if (key === 'network') return '/v2/network';
+  if (key === 'nodes') return '/v2/nodes';
+  if (key === 'billing') return '/v2/billing/me';
+  return '/v2/me';
+}
+
+function bodyFor(key) {
+  if (key === 'overview') return `
+    <section class="grid overview-grid">
+      <article class="card span8"><span class="kicker">RelNet</span><h2>Tu red privada</h2><p>Estado, identidad y operaciones de tu Space se obtienen desde el mismo control-plane Northbound que usa MCP.</p><div id="primary-data" class="data-panel" data-endpoint="/v2/me"></div></article>
+      <article class="card span4"><span class="kicker">Control plane</span><h2>Northbound</h2><p>La Console no elige controllers ni expone infraestructura global. Las decisiones de placement, policy y dispatch ocurren server-side.</p><div class="status-line"><i></i><span id="northbound-status">Comprobando…</span></div></article>
+      <article class="card span6"><h3>Mi red</h3><div id="network-summary" class="data-panel compact" data-endpoint="/v2/network"></div><a class="button secondary" href="/dashboard/network">Abrir red</a></article>
+      <article class="card span6"><h3>Mis nodos</h3><div id="nodes-summary" class="data-panel compact" data-endpoint="/v2/nodes"></div><a class="button secondary" href="/dashboard/nodes">Abrir nodos</a></article>
+    </section>`;
+  if (key === 'network') return `<section class="grid"><article class="card span12"><span class="kicker">Network</span><h2>Mi red</h2><p>Topología y estado observados únicamente dentro de tu Space.</p><div id="primary-data" class="data-panel" data-endpoint="/v2/network"></div></article></section>`;
+  if (key === 'nodes') return `<section class="grid"><article class="card span12"><span class="kicker">Nodes</span><h2>Mis nodos</h2><p>Inventario de nodos autorizado para tu red. Enrollment y mutaciones se habilitan sólo cuando Northbound confirma scope y entitlement.</p><div id="primary-data" class="data-panel" data-endpoint="/v2/nodes"></div></article></section>`;
+  if (key === 'access') return `<section class="grid"><article class="card span7"><span class="kicker">Access</span><h2>Acceso autorizado</h2><p>SSH y otras sesiones se solicitan a través de Northbound y requieren scope, ownership, entitlement y policy efectivos.</p><div id="primary-data" class="data-panel" data-endpoint="/v2/me"></div></article><article class="card span5"><h3>Seguridad</h3><ul class="clean-list"><li>La Console no almacena contraseñas de nodos.</li><li>MCP requiere Bearer explícito.</li><li>Los dispatch tickets son internos al control-plane.</li><li><code>platform:*</code> pertenece sólo a Builder.</li></ul></article></section>`;
+  return `<section class="grid"><article class="card span12"><span class="kicker">Billing</span><h2>Plan y entitlements</h2><p>El plan comercial y los permisos efectivos se resuelven server-side; la UI nunca concede capacidades.</p><div id="primary-data" class="data-panel" data-endpoint="/v2/billing/me"></div></article></section>`;
+}
+
+function clientScript() {
+  return `<script>
+  (() => {
+    const safe = (v) => String(v == null ? '—' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+    const render = (value) => {
+      if (Array.isArray(value)) return value.length ? '<ul class="data-list">' + value.slice(0,12).map(v => '<li>' + render(v) + '</li>').join('') + '</ul>' : '<p class="muted">Sin elementos.</p>';
+      if (value && typeof value === 'object') return '<dl class="kv">' + Object.entries(value).slice(0,18).map(([k,v]) => '<div><dt>'+safe(k)+'</dt><dd>'+((v && typeof v === 'object') ? render(v) : safe(v))+'</dd></div>').join('') + '</dl>';
+      return '<span>'+safe(value)+'</span>';
+    };
+    async function load(el) {
+      const endpoint = el.dataset.endpoint;
+      el.innerHTML = '<div class="state" data-ui-state="loading">Cargando…</div>';
+      try {
+        const response = await fetch(endpoint, {headers:{accept:'application/json'}, credentials:'same-origin'});
+        if (response.status === 401 || response.status === 403) { el.innerHTML = '<div class="state denied" data-ui-state="permission-denied">No autorizado para esta vista.</div>'; return false; }
+        if (response.status === 503 || response.status === 502) { el.innerHTML = '<div class="state blocked" data-ui-state="blocked">Control Edge Northbound pendiente o no disponible.</div>'; return false; }
+        if (!response.ok) { el.innerHTML = '<div class="state error" data-ui-state="error">No fue posible obtener esta información.</div>'; return false; }
+        const data = await response.json();
+        el.innerHTML = render(data);
+        return true;
+      } catch (_) {
+        el.innerHTML = '<div class="state offline" data-ui-state="offline">Sin conexión al control-plane.</div>';
+        return false;
+      }
+    }
+    Promise.all([...document.querySelectorAll('[data-endpoint]')].map(load)).then(results => {
+      const status = document.getElementById('northbound-status');
+      if (status) status.textContent = results.some(Boolean) ? 'Conectado' : 'Pendiente';
+    });
+  })();
+  </script>`;
+}
+
+export function renderRelnetConsole(pathname) {
+  const clean = pathname.replace(/\/$/, '') || '/console';
+  const key = routeKey(clean);
+  const title = titleFor(key);
+  const nav = NAV.map(([label, href]) => `<a href="${href.replace('/console','/dashboard') || '/dashboard'}"${routeKey(href) === key ? ' aria-current="page"' : ''}>${esc(label)}</a>`).join('');
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${esc(title)} · RelNet</title><link rel="stylesheet" href="/console/relnet/assets/ui.css"></head><body><a class="skip" href="#main-content">Saltar al contenido</a><div class="app"><aside class="sidebar"><a class="brand" href="/dashboard" aria-label="RelNet"><img src="https://relead.com.mx/relnet-brand-transparent.png" alt="RelNet"><span>Console</span></a><nav class="nav" aria-label="Navegación de RelNet">${nav}</nav><div class="sidebar-foot"><small>USER CONTROL PLANE</small><strong>Tenant scoped</strong><small>API + MCP → Northbound</small></div></aside><div class="workspace"><header class="topbar"><div><span class="breadcrumb">console.relead.com.mx</span><strong>${esc(title)}</strong></div><div class="topmeta"><span class="badge">RelNet</span><a href="https://auth.relead.com.mx/access">Cuenta</a></div></header><main id="main-content" class="content"><div class="hero"><div><span class="eyebrow">Authenticated user console</span><h1>${esc(title)}</h1><p>Una sola superficie para tu identidad, tu red y tus nodos. La autoridad vive en Auth + Northbound, no en el navegador.</p></div></div>${bodyFor(key)}</main><footer class="footer">ReLead · RelNet Console · user-plane</footer></div></div>${clientScript()}</body></html>`;
+}
