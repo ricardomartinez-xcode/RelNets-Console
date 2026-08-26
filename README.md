@@ -1,44 +1,132 @@
-# ReLead-App
+# ReLead-App — RelNet User Console
 
-Transitional edge compatibility layer for ReLead v90.
+Canonical authenticated user surface for RelNet.
 
-## Canonical surfaces
+## Public surfaces
 
-- Public: `https://relead.com.mx`
-- RelNet Console: `https://console.relead.com.mx`
-- Backend/API: `https://api.relead.com.mx`
+- `https://console.relead.com.mx/dashboard` — browser UI
+- `https://console.relead.com.mx/v2` — user REST API resource
+- `https://console.relead.com.mx/mcp` — public user MCP resource
+- `https://auth.relead.com.mx` — central OAuth/OIDC Authorization Server
 
-## Temporary console-alias bridge
+The Console is **user-plane only**. Builder/admin infrastructure is not part of this application.
 
-`console.relead.com.mx` is currently attached to this deployment while the real Console UI is built by `ReLead-Control-Web` and exposed at `https://admin.relead.com.mx`. Redirecting graphical requests to `console.relead.com.mx` from this project would therefore loop back into itself.
+## Architecture
 
-Until the custom domain is reassigned to the Control Web project, this edge **proxies graphical Console routes internally** to `CONSOLE_UI_ORIGIN` (default `https://admin.relead.com.mx`) while the browser remains on `console.relead.com.mx`.
+```text
+Landing / relead.com.mx
+        |
+        v
+Auth-Identity / auth.relead.com.mx
+        |
+        v
+Console / console.relead.com.mx
+        |
+   +----+----+
+   |         |
+  /v2       /mcp
+   |         |
+   +----+----+
+        v
+Control Edge Northbound
+        |
+  Controller fleet
+        |
+Control Edge Southbound
+        |
+   User RelNets
+```
 
-Backend routes (`/admin/api/*`, `/console/api/*`, `/api/v1/*`, `/relnet/v1/*`, `/auth/*`, `/oauth/*`, `/install/*`, `/ws/*`) continue to go directly to `BACKEND_ORIGIN` (default `https://api.relead.com.mx`). Registration and OTP remain legacy UI routes. `/billing` is now a local fail-closed RelNet Product Console surface; live billing truth still requires an authoritative server-side Product API contract.
+`/v2` and `/mcp` are two adapters to the **same RelNet control-plane/domain layer**. Neither interface selects controllers itself.
 
-This bridge is temporary. The final architecture is to assign `console.relead.com.mx` directly to `ReLead-Control-Web`, then retire the UI-proxy behavior from this repo.
+## Authentication
 
-## RelNet Next Console UI
+The browser uses central Auth with Authorization Code + PKCE and fixed client `relead-console`.
 
-The authenticated human surface is `https://console.relead.com.mx`. This workstream is UI-only: it does not implement networking, billing business logic, AI scheduling, Product PostgreSQL or entitlement decisions.
+Canonical resources:
 
-Local product routes:
-- `/console/relnet`
-- `/console/relnet/controllers`
-- `/console/relnet/nodes`
-- `/console/relnet/edge`
-- `/console/relnet/network`
-- `/console/relnet/access`
-- `/console/relnet/installation`
-- `/console/relnet/diagnostics`
-- `/console/relnet/migration`
-- `/console/relnet/ai`
-- `/billing`
+- API: `https://console.relead.com.mx/v2`
+- MCP: `https://console.relead.com.mx/mcp`
 
-The current contract audit used official `next/integration` HEAD `366678973bc843392fce404507f03ea2da74b8e5`, plus the delegated Agent-5/Agent-7 coordination contract. NetworkMap, path, Relay capacity and Service Stream semantics come from the current `next/contracts/**` files.
+The dashboard stores its short-lived user access token only in the `__Host-relead_console_at` HttpOnly/Secure/SameSite=Lax cookie.
 
-Product AI UI is deliberately provider-neutral. The delegated commercial contract fixes Free as not included/0 AI Credits, Pro at 100 AI Credits/month, Team at a pooled 500/month, and Business at a bounded contractual/configurable quota. Credits are never translated into hours, tokens or provider units. Effective plan, paid subscription, revenue gate, entitlement, reservations and usage remain server-side truth.
+MCP requires an explicit `Authorization: Bearer ...` header and **must never inherit the dashboard cookie**.
 
-`commercial/contracts/public-plans.json` at the audited integration HEAD has not yet incorporated the delegated pricing/AI revision, so this branch does not render contradictory plan prices. `/billing` remains fail-closed until the canonical commercial endpoint is integrated.
+`platform:*` is not a Console/user-plane scope. It belongs only to Builder.
 
-Authentication remains an integration boundary of the existing Console front door. The current source contract does not define a new `/console/relnet` session-validation endpoint, so this task does not invent one. The isolated Vercel Preview must remain access-protected, and production promotion must preserve an authenticated Console boundary.
+## Northbound integration
+
+Required runtime variable once the Control Edge Northbound has a verified origin:
+
+```text
+RELNET_NORTHBOUND_ORIGIN=https://<verified-northbound-origin>
+```
+
+Requirements:
+
+- HTTPS only.
+- Do not include `/v2` or `/mcp` in the variable; the incoming canonical path is preserved.
+- Both `/v2/*` and `/mcp*` use this same origin.
+- Cookies are stripped before proxying to Northbound.
+- The verified bearer is forwarded through `Authorization`.
+- If this variable is absent or invalid, `/v2` and `/mcp` fail closed with `503`.
+
+Do **not** configure a placeholder origin. Wait for the Northbound deployment to provide a real health-checked endpoint.
+
+## Local user Console routes
+
+The current tenant-scoped UI exposes:
+
+- `/dashboard` → overview
+- `/dashboard/network` → user's network
+- `/dashboard/nodes` → user's nodes
+- `/dashboard/access` → authorized access surface
+- `/dashboard/billing` → plan/entitlements view
+
+Internal render paths remain under `/console/*` for compatibility inside this repository.
+
+The Console intentionally does **not** expose:
+
+- controller fleet administration
+- global Edge management
+- Builder
+- rescue/browser/terminal administration
+- infrastructure deployments
+- global diagnostics
+- `platform:*`
+
+Requests for `/admin` or `/admin/*` are not canonicalized into the user Console.
+
+## Policy boundary
+
+The browser never grants capabilities. Effective authorization belongs server-side and combines:
+
+```text
+OAuth scope
++ authenticated identity
++ tenant/network ownership
++ subscription status
++ plan entitlement
++ operation policy
+= allow / deny
+```
+
+Northbound revalidates the bearer and resolves the actual Space/network context.
+
+## Transitional compatibility
+
+A limited set of historical routes still exists while migration completes (`/console/api/*`, `/api/v1/*`, `/relnet/v1/*`, install and websocket compatibility paths). These are not the canonical `/v2` or `/mcp` implementation.
+
+`BACKEND_ORIGIN` and `CONSOLE_UI_ORIGIN` are compatibility variables only. New RelNet functionality must use Northbound instead of extending those legacy adapters.
+
+## Deployment gate
+
+Do not promote this branch to production until all of the following are true:
+
+1. `auth.relead.com.mx` discovery, JWKS and health are healthy.
+2. Control Edge Northbound provides a verified HTTPS origin.
+3. `RELNET_NORTHBOUND_ORIGIN` is configured for the intended Vercel environment.
+4. `/v2` and `/mcp` E2E authorization tests pass against Northbound.
+5. GitHub CI and Vercel Preview are green.
+
+Current production deployment may remain on the older compatibility Console until this gate is satisfied.
