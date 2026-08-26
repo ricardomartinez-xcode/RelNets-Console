@@ -9,6 +9,7 @@ const TOKEN_URL = `${AUTH_ISSUER}/oauth/token`;
 const USERINFO_URL = `${AUTH_ISSUER}/userinfo`;
 const CLIENT_ID = 'relead-console';
 const REDIRECT_URI = 'https://console.relead.com.mx/auth/callback';
+
 export const USER_API_RESOURCE = 'https://console.relead.com.mx/v2';
 export const USER_MCP_RESOURCE = 'https://console.relead.com.mx/mcp';
 
@@ -147,6 +148,7 @@ async function finishOAuth(request) {
     code_verifier: verifier,
     resource: USER_API_RESOURCE,
   });
+
   const response = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: {
@@ -156,11 +158,13 @@ async function finishOAuth(request) {
     body,
     redirect: 'manual',
   });
+
   if (!response.ok) return redirect(ACCESS_URL, 303, clear);
 
   const payload = await response.json();
   const token = typeof payload?.access_token === 'string' ? payload.access_token : '';
   if (!token) return redirect(ACCESS_URL, 303, clear);
+
   const expiresIn = Number.isFinite(Number(payload.expires_in))
     ? Math.max(60, Math.min(900, Number(payload.expires_in)))
     : 900;
@@ -221,27 +225,59 @@ function workerEnv() {
   return env;
 }
 
-async function proxyUserMcp(request) {
-  const bearer = request.headers.get('authorization') || '';
-  if (!/^Bearer\s+\S+$/i.test(bearer)) return unauthorized('/.well-known/oauth-protected-resource/mcp', 'relnet.profile.read');
-  const origin = process.env.USER_MCP_ORIGIN?.trim();
-  if (!origin) {
-    return Response.json({ error: 'user_mcp_backend_pending' }, {
+export function normalizeNorthboundOrigin(value = process.env.RELNET_NORTHBOUND_ORIGIN) {
+  const raw = value?.trim();
+  if (!raw) return null;
+  const url = new URL(raw);
+  if (url.protocol !== 'https:') throw new Error('RELNET_NORTHBOUND_ORIGIN must use HTTPS');
+  url.pathname = '/';
+  url.search = '';
+  url.hash = '';
+  return url.origin;
+}
+
+export function buildNorthboundTarget(requestUrl, origin) {
+  const incoming = new URL(requestUrl);
+  const base = normalizeNorthboundOrigin(origin);
+  if (!base) return null;
+  return new URL(`${incoming.pathname}${incoming.search}`, `${base}/`);
+}
+
+async function proxyNorthbound(request, bearer, surface) {
+  let target;
+  try {
+    target = buildNorthboundTarget(request.url, process.env.RELNET_NORTHBOUND_ORIGIN);
+  } catch {
+    return Response.json({ error: 'northbound_configuration_invalid' }, {
       status: 503,
-      headers: {
-        'cache-control': 'no-store',
-        'www-authenticate': challenge('/.well-known/oauth-protected-resource/mcp', 'relnet.profile.read'),
-      },
+      headers: { 'cache-control': 'no-store' },
     });
   }
-  const incoming = new URL(request.url);
-  const target = new URL(incoming.pathname + incoming.search, origin.endsWith('/') ? origin : `${origin}/`);
-  return fetch(new Request(target, {
-    method: request.method,
-    headers: request.headers,
-    body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
-    redirect: 'manual',
-  }));
+  if (!target) {
+    return Response.json({ error: 'relnet_northbound_pending' }, {
+      status: 503,
+      headers: { 'cache-control': 'no-store' },
+    });
+  }
+
+  const headers = new Headers(request.headers);
+  headers.delete('cookie');
+  headers.set('authorization', `Bearer ${bearer}`);
+  headers.set('x-relead-proxy-surface', surface);
+
+  try {
+    return await fetch(new Request(target, {
+      method: request.method,
+      headers,
+      body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+      redirect: 'manual',
+    }));
+  } catch {
+    return Response.json({ error: 'relnet_northbound_unavailable' }, {
+      status: 502,
+      headers: { 'cache-control': 'no-store' },
+    });
+  }
 }
 
 export default async function middleware(request) {
@@ -252,6 +288,7 @@ export default async function middleware(request) {
   if (legacy) return legacy;
 
   const url = new URL(request.url);
+
   if (url.pathname === '/healthz') return worker.fetch(request, workerEnv());
   if (url.pathname === '/auth/start') return startOAuth();
   if (url.pathname === '/auth/callback') return finishOAuth(request);
@@ -260,11 +297,19 @@ export default async function middleware(request) {
     return metadataResponse(USER_API_RESOURCE, UI_SCOPES.split(' '));
   }
   if (url.pathname === '/.well-known/oauth-protected-resource/mcp') {
-    return metadataResponse(USER_MCP_RESOURCE, UI_SCOPES.split(' ').filter((scope) => scope !== 'offline_access'));
+    return metadataResponse(
+      USER_MCP_RESOURCE,
+      UI_SCOPES.split(' ').filter((scope) => scope !== 'offline_access'),
+    );
   }
 
   if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
-    return proxyUserMcp(request);
+    const header = request.headers.get('authorization') || '';
+    const bearer = /^Bearer\s+(\S+)$/i.exec(header)?.[1] || '';
+    if (!bearer) {
+      return unauthorized('/.well-known/oauth-protected-resource/mcp', 'relnet.profile.read');
+    }
+    return proxyNorthbound(request, bearer, 'mcp');
   }
 
   const browserToken = cookieValue(request.headers.get('cookie'), ACCESS_TOKEN_COOKIE);
@@ -272,16 +317,20 @@ export default async function middleware(request) {
   if (url.pathname === '/v2' || url.pathname.startsWith('/v2/')) {
     const header = request.headers.get('authorization');
     const bearer = /^Bearer\s+(.+)$/i.exec(header || '')?.[1] || browserToken;
-    if (!bearer) return unauthorized('/.well-known/oauth-protected-resource/v2', 'relnet.profile.read');
-    const internalPath = '/api/v1' + url.pathname.slice('/v2'.length);
-    return worker.fetch(internalRequest(request, internalPath || '/api/v1', bearer), workerEnv());
+    if (!bearer) {
+      return unauthorized('/.well-known/oauth-protected-resource/v2', 'relnet.profile.read');
+    }
+    return proxyNorthbound(request, bearer, 'api-v2');
   }
 
   if (!browserToken || !(await validBrowserToken(browserToken))) {
     return redirect(ACCESS_URL, 302, browserToken ? [clearCookie(ACCESS_TOKEN_COOKIE)] : []);
   }
 
-  if (url.pathname === '/') return redirect('https://console.relead.com.mx/dashboard', 302);
+  if (url.pathname === '/') {
+    return redirect('https://console.relead.com.mx/dashboard', 302);
+  }
+
   if (url.pathname === '/dashboard' || url.pathname.startsWith('/dashboard/')) {
     const internalPath = '/console' + url.pathname.slice('/dashboard'.length);
     return worker.fetch(internalRequest(request, internalPath || '/console/', browserToken), workerEnv());
