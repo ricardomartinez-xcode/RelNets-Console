@@ -2,21 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canonicalTarget } from '../src/index.js';
 
-test('console-domain root canonicalizes locally instead of redirecting to itself by hostname', () => {
+test('console-domain root canonicalizes locally', () => {
   const target = canonicalTarget(new URL('https://console.relead.com.mx/'));
   assert.equal(target.toString(), 'https://console.relead.com.mx/console/');
 });
 
-test('legacy admin UI canonicalizes inside the same console hostname', () => {
-  const target = canonicalTarget(new URL('https://console.relead.com.mx/admin/rescue'));
-  assert.equal(target.origin, 'https://console.relead.com.mx');
-  assert.equal(target.pathname, '/console/');
-  assert.equal(target.searchParams.get('area'), 'admin');
+test('tenant-scoped Console routes stay on the canonical host', () => {
+  const target = canonicalTarget(new URL('https://console.relead.com.mx/console/nodes?limit=20'));
+  assert.equal(target.toString(), 'https://console.relead.com.mx/console/nodes?limit=20');
 });
 
-test('console UI routes remain on the canonical host', () => {
-  const target = canonicalTarget(new URL('https://console.relead.com.mx/security/otp?setup=1'));
-  assert.equal(target.toString(), 'https://console.relead.com.mx/console/?setup=1');
+test('Builder/admin paths are never canonicalized into the user Console', () => {
+  assert.equal(canonicalTarget(new URL('https://console.relead.com.mx/admin')), null);
+  assert.equal(canonicalTarget(new URL('https://console.relead.com.mx/admin/rescue')), null);
 });
 
 test('unknown API paths are never converted into graphical redirects', () => {

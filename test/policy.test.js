@@ -12,10 +12,11 @@ import {
   rewriteUiLocation,
 } from '../src/policy.js';
 
-test('legacy backend prefixes remain explicit while local user Console routes are not proxied UI', () => {
-  for (const path of ['/admin/api/session','/console/api/modules/relnet','/api/v1/billing/plans','/relnet/v1/nodes','/install/downloads/linux','/ws/terminal']) {
+test('compatibility backend paths exclude Builder/admin and local user routes', () => {
+  for (const path of ['/console/api/modules/relnet','/api/v1/billing/plans','/relnet/v1/nodes','/install/downloads/linux','/ws/terminal']) {
     assert.equal(isBackendProxyPath(path, 'GET'), true, path);
   }
+  assert.equal(isBackendProxyPath('/admin/api/session', 'GET'), false);
   assert.equal(isBackendProxyPath('/console/login', 'POST'), true);
   assert.equal(isBackendProxyPath('/console/login', 'GET'), false);
   for (const path of ['/console','/console/network','/console/nodes','/console/access','/console/billing']) {
@@ -30,7 +31,7 @@ test('canonical Console URL keeps user paths on console.relead.com.mx', () => {
   assert.equal(canonicalConsoleUrl('https://example.invalid/console/nodes?limit=20').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/nodes?limit=20`);
 });
 
-test('UI upstream remains a distinct HTTPS compatibility origin', () => {
+test('UI compatibility upstream is distinct and HTTPS-only', () => {
   assert.equal(normalizeUiOrigin(), DEFAULT_CONSOLE_UI_ORIGIN);
   assert.equal(normalizeUiOrigin('https://admin.relead.com.mx/path'), DEFAULT_CONSOLE_UI_ORIGIN);
   assert.throws(() => normalizeUiOrigin('http://admin.relead.com.mx'), /HTTPS/);
@@ -38,7 +39,7 @@ test('UI upstream remains a distinct HTTPS compatibility origin', () => {
   assert.doesNotThrow(() => assertDistinctUiOrigin(CANONICAL_CONSOLE_ORIGIN, DEFAULT_CONSOLE_UI_ORIGIN));
 });
 
-test('legacy UI redirects are rewritten only when they point to the configured UI origin', () => {
+test('legacy UI locations are rewritten only from the configured upstream', () => {
   assert.equal(
     rewriteUiLocation('https://admin.relead.com.mx/security/otp?next=%2Fbilling', CANONICAL_CONSOLE_ORIGIN, DEFAULT_CONSOLE_UI_ORIGIN),
     'https://console.relead.com.mx/security/otp?next=%2Fbilling',
@@ -49,7 +50,7 @@ test('legacy UI redirects are rewritten only when they point to the configured U
   );
 });
 
-test('backend origin requires HTTPS', () => {
+test('backend compatibility origin requires HTTPS', () => {
   assert.equal(normalizeOrigin('https://api.relead.com.mx/x'), 'https://api.relead.com.mx');
   assert.throws(() => normalizeOrigin('http://api.relead.com.mx'), /HTTPS/);
 });
