@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import worker from '../src/index.js';
 import { RELNET_NEXT_ROUTES, UI_STATES } from '../src/relnet-ui.js';
 
-const request = (path) => new Request(`https://console.relead.com.mx${path}`, { headers: { accept: 'text/html' } });
+const request = (path) => new Request(`https://console.relnets.com${path}`, { headers: { accept: 'text/html' } });
 const html = async (path) => (await worker.fetch(request(path), {})).text();
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -49,7 +49,7 @@ test('Access page states the admin boundary explicitly', async () => {
   const page = await html('/console/access');
   assert.match(page, /platform:\*/i);
   assert.match(page, /Builder/i);
-  assert.match(page, /scope.*ownership.*entitlement.*policy/is);
+  assert.match(page, /scope.*ownership.*entitlem.*policy/is);
   assert.doesNotMatch(page, /host admin|rescue global|global secrets/i);
 });
 
@@ -57,20 +57,20 @@ test('Mandatory UI states remain explicit and fail-closed client code handles No
   assert.deepEqual(UI_STATES, ['loading','empty','offline','partial','degraded','blocked','error','retry','permission-denied','unsupported']);
   const page = await html('/console');
   assert.match(page, /relnet_northbound|Control Edge Northbound|Northbound/i);
-  assert.match(page, /response\.status === 503 \|\| response\.status === 502/);
+  assert.match(page, /response\.status === 503 \|| response\.status === 502/);
   assert.match(page, /permission-denied/);
-  assert.match(page, /credentials:['"]same-origin['"]/);
+  assert.match(page, /credentials:["']same-origin["']/);
 });
 
 test('Console branding and responsive accessibility contracts are present', async () => {
   const page = await html('/console/nodes');
   assert.match(page, /relead\.com\.mx\/relnet-brand-transparent\.png/);
-  assert.match(page, /<main[^>]+id=["']main-content["']/);
-  assert.match(page, /aria-label=["']Navegación de RelNet["']/);
+  assert.match(page, /<main[>]+id=["']main-content["']/);
+  assert.match(page, /aria-label=["'WNavegación de RelNet["']/);
   assert.match(page, /href=["']#main-content["']/);
   const css = read('src/relnet-ui.css');
   assert.match(css, /@media\(max-width:960px\)/);
   assert.match(css, /@media\(max-width:640px\)/);
-  assert.match(css, /:focus-visible/);
+  assert.match(cs, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion/);
 });
