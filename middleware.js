@@ -2,16 +2,16 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import process from 'node:process';
 import worker from './src/index.js';
 
-const AUTH_ISSUER = 'https://auth.relead.com.mx';
+const AUTH_ISSUER = 'https://auth.relnets.com';
 const ACCESS_URL = `${AUTH_ISSUER}/access`;
 const AUTHORIZE_URL = `${AUTH_ISSUER}/oauth/authorize`;
 const TOKEN_URL = `${AUTH_ISSUER}/oauth/token`;
 const USERINFO_URL = `${AUTH_ISSUER}/userinfo`;
 const CLIENT_ID = 'relead-console';
-const REDIRECT_URI = 'https://console.relead.com.mx/auth/callback';
+const REDIRECT_URI = 'https://console.relnets.com/auth/callback';
 
-export const USER_API_RESOURCE = 'https://console.relead.com.mx/v2';
-export const USER_MCP_RESOURCE = 'https://console.relead.com.mx/mcp';
+export const USER_API_RESOURCE = 'https://console.relnets.com/v2';
+export const USER_MCP_RESOURCE = 'https://console.relnets.com/mcp';
 
 const UI_SCOPES = [
   'openid',
@@ -105,7 +105,7 @@ function metadataResponse(resource, scopes) {
 }
 
 function challenge(metadataPath, scope = 'relnet.profile.read') {
-  return `Bearer resource_metadata="https://console.relead.com.mx${metadataPath}", scope="${scope}"`;
+  return `Bearer resource_metadata="https://console.relnets.com${metadataPath}", scope="${scope}"`;
 }
 
 function unauthorized(metadataPath, scope) {
@@ -169,7 +169,7 @@ async function finishOAuth(request) {
     ? Math.max(60, Math.min(900, Number(payload.expires_in)))
     : 900;
 
-  return redirect('https://console.relead.com.mx/dashboard', 303, [
+  return redirect('https://console.relnets.com/dashboard', 303, [
     ...clear,
     secureCookie(ACCESS_TOKEN_COOKIE, token, Math.max(30, expiresIn - 30)),
   ]);
@@ -328,7 +328,7 @@ export default async function middleware(request) {
   }
 
   if (url.pathname === '/') {
-    return redirect('https://console.relead.com.mx/dashboard', 302);
+    return redirect('https://console.relnets.com/dashboard', 302);
   }
 
   if (url.pathname === '/dashboard' || url.pathname.startsWith('/dashboard/')) {
@@ -336,5 +336,5 @@ export default async function middleware(request) {
     return worker.fetch(internalRequest(request, internalPath || '/console/', browserToken), workerEnv());
   }
 
-  return redirect('https://console.relead.com.mx/dashboard', 302);
+  return redirect('https://console.relnets.com/dashboard', 302);
 }
