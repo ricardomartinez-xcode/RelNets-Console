@@ -6,17 +6,31 @@ on:
       - feat/auth-gated-console-20260825
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout:v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: node --test test/relnet-next-ui.test.js
+      - name: Capture test output
+        shell: bash
+        run: |
+          set +e
+          node --test test/relnet-next-ui.test.js > diag-relnet-next-ui.log 2>&1
+          code=$?
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add diag-relnet-next-ui.log
+          git commit -m "ci(console): capture failing next UI test output" || true
+          git push
+          exit $code
