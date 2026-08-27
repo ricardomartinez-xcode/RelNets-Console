@@ -26,8 +26,8 @@ test('compatibility backend paths exclude Builder/admin and local user routes', 
   assert.equal(isConsoleUiPath('/security/otp'), true);
 });
 
-test('canonical Console URL keeps user paths on console.relead.com.mx', () => {
-  assert.equal(canonicalConsoleUrl('https://console.relead.com.mx/console/network').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/network`);
+test('canonical Console URL keeps user paths on console.relnets.com', () => {
+  assert.equal(canonicalConsoleUrl('https://console.relnets.com/console/network').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/network`);
   assert.equal(canonicalConsoleUrl('https://example.invalid/console/nodes?limit=20').toString(), `${CANONICAL_CONSOLE_ORIGIN}/console/nodes?limit=20`);
 });
 
@@ -42,7 +42,7 @@ test('UI compatibility upstream is distinct and HTTPS-only', () => {
 test('legacy UI locations are rewritten only from the configured upstream', () => {
   assert.equal(
     rewriteUiLocation('https://admin.relead.com.mx/security/otp?next=%2Fbilling', CANONICAL_CONSOLE_ORIGIN, DEFAULT_CONSOLE_UI_ORIGIN),
-    'https://console.relead.com.mx/security/otp?next=%2Fbilling',
+    'https://console.relnets.com/security/otp?next=%2Fbilling',
   );
   assert.equal(
     rewriteUiLocation('https://accounts.google.com/o/oauth2/v2/auth', CANONICAL_CONSOLE_ORIGIN, DEFAULT_CONSOLE_UI_ORIGIN),
