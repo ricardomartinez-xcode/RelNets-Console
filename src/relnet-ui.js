@@ -45,7 +45,7 @@ function bodyFor(key) {
   if (key === 'overview') return `
     <section class="grid overview-grid">
       <article class="card span8"><span class="kicker">RelNet</span><h2>Tu red privada</h2><p>Estado, identidad y operaciones de tu Space se obtienen desde el mismo control-plane Northbound que usa MCP.</p><div id="primary-data" class="data-panel" data-endpoint="/v2/me"></div></article>
-      <article class="card span4"><span class="kicker">Control plane</span><h2>Northbound</h2><p>La Console no elige controllers ni expone global infrastructure. Las decisiones de placement, policy y dispatch ocurren server-side.</p><div class="status-line"><i></i><span id="northbound-status">Comprobando…</span></div></article>
+      <article class="card span4"><span class="kicker">Control plane</span><h2>Northbound</h2><p>La Console no elige controllers ni expone infraestructura global. Las decisiones de placement, policy y dispatch ocurren server-side.</p><div class="status-line"><i></i><span id="northbound-status">Comprobando…</span></div></article>
       <article class="card span6"><h3>Mi red</h3><div id="network-summary" class="data-panel compact" data-endpoint="/v2/network"></div><a class="button secondary" href="/dashboard/network">Abrir red</a></article>
       <article class="card span6"><h3>Mis nodos</h3><div id="nodes-summary" class="data-panel compact" data-endpoint="/v2/nodes"></div><a class="button secondary" href="/dashboard/nodes">Abrir nodos</a></article>
     </section>`;
@@ -75,7 +75,7 @@ function bodyFor(key) {
       </div>
     </article>
     <article class="card span12">
-      <h3>Administrar suscripción</h3>
+      <h3>Administrar suscripción </h3>
       <p>Actualiza método de pago, consulta facturas o programa cancelación desde Customer Portal.</p>
       <button class="button secondary" type="button" id="billing-portal">Abrir Customer Portal</button>
       <details class="billing-fallback"><summary>Fallback de pago</summary><p>Si Checkout desde la Console no está disponible, usa temporalmente un Payment Link.</p>
