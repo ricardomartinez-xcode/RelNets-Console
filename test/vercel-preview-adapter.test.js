@@ -6,6 +6,6 @@ test('Vercel adapter sends unauthenticated Console routes through the central Au
   assert.equal(config.runtime,'nodejs');
   const response=await middleware(new Request('https://preview.example/billing'));
   assert.equal(response.status,302);
-  assert.equal(response.headers.get('location'),'https://auth.relead.com.mx/access');
+  assert.equal(response.headers.get('location'),'https://auth.relnets.com/access');
   assert.equal(response.headers.get('cache-control'),'no-store');
 });
