@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import worker from '../src/index.js';
 import { RELNET_NEXT_ROUTES } from '../src/relnet-ui.js';
 
-const req = (path) => new Request(`https://console.relead.com.mx${path}`, { headers: { accept: 'text/html' } });
+const req = (path) => new Request(`https://console.relnets.com${path}`, { headers: { accept: 'text/html' } });
 const page = async (path) => (await worker.fetch(req(path), {})).text();
 
 test('product Console exposes user routes and no controller-fleet route', () => {
