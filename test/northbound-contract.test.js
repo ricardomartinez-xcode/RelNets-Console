@@ -19,7 +19,7 @@ test('Northbound origin requires HTTPS and normalizes to origin only', () => {
 
 test('Northbound target preserves canonical /v2 path and query', () => {
   const target = buildNorthboundTarget(
-    'https://console.relead.com.mx/v2/nodes?limit=20',
+    'https://console.relnets.com/v2/nodes?limit=20',
     'https://northbound.example',
   );
   assert.equal(
@@ -30,7 +30,7 @@ test('Northbound target preserves canonical /v2 path and query', () => {
 
 test('MCP requires an explicit bearer and never falls back to dashboard cookie', async () => {
   const response = await middleware(new Request(
-    'https://console.relead.com.mx/mcp',
+    'https://console.relnets.com/mcp',
     { headers: { cookie: '__Host-relead_console_at=browser-token' } },
   ));
   assert.equal(response.status, 401);
@@ -45,14 +45,14 @@ test('/v2 and /mcp fail closed while Northbound origin is not configured', async
   delete process.env.RELNET_NORTHBOUND_ORIGIN;
   try {
     const api = await middleware(new Request(
-      'https://console.relead.com.mx/v2/nodes',
+      'https://console.relnets.com/v2/nodes',
       { headers: { authorization: 'Bearer test-token' } },
     ));
     assert.equal(api.status, 503);
     assert.deepEqual(await api.json(), { error: 'relnet_northbound_pending' });
 
     const mcp = await middleware(new Request(
-      'https://console.relead.com.mx/mcp',
+      'https://console.relnets.com/mcp',
       { headers: { authorization: 'Bearer test-token' } },
     ));
     assert.equal(mcp.status, 503);
