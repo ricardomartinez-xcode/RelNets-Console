@@ -71,6 +71,6 @@ test('Console branding and responsive accessibility contracts are present', asyn
   const css = read('src/relnet-ui.css');
   assert.match(css, /@media\(max-width:960px\)/);
   assert.match(css, /@media\(max-width:640px\)/);
-  assert.match(cs, /:focus-visible/);
-  assert.match(css, /prefers-reduced-motion/);
+  assert.match(css, /:focus-visible/);
+  assert.match(cs, /prefers-reduced-motion/);
 });
