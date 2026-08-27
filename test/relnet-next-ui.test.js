@@ -1,12 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import worker from '../src/index.js';
 import { RELNET_NEXT_ROUTES, UI_STATES } from '../src/relnet-ui.js';
 
 const request = (path) => new Request(`https://console.relnets.com${path}`, { headers: { accept: 'text/html' } });
 const html = async (path) => (await worker.fetch(request(path), {})).text();
-const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('Console serves only tenant-scoped product routes locally', async () => {
   const expected = ['/console','/console/network','/console/nodes','/console/access','/console/billing'];
@@ -57,20 +55,24 @@ test('Mandatory UI states remain explicit and fail-closed client code handles No
   assert.deepEqual(UI_STATES, ['loading','empty','offline','partial','degraded','blocked','error','retry','permission-denied','unsupported']);
   const page = await html('/console');
   assert.match(page, /relnet_northbound|Control Edge Northbound|Northbound/i);
-  assert.match(page, /response\.status === 503 \|| response\.status === 502/);
+  assert.match(page, /response\.status === 503 \|\| response\.status === 502/);
   assert.match(page, /permission-denied/);
   assert.match(page, /credentials:["']same-origin["']/);
 });
 
-test('Console branding and responsive accessibility contracts are present', async () => {
+test('Console branding and served CSS preserve responsive accessibility contracts', async () => {
   const page = await html('/console/nodes');
   assert.match(page, /relead\.com\.mx\/relnet-brand-transparent\.png/);
-  assert.match(page, /<main[>]+id=["']main-content["']/);
-  assert.match(page, /aria-label=["'WNavegación de RelNet["']/);
+  assert.match(page, /<main[^>]+id=["']main-content["']/);
+  assert.match(page, /aria-label=["']Navegación de RelNet["']/);
   assert.match(page, /href=["']#main-content["']/);
-  const css = read('src/relnet-ui.css');
+
+  const cssResponse = await worker.fetch(request('/console/relnet/assets/ui.css'), {});
+  assert.equal(cssResponse.status, 200);
+  assert.match(cssResponse.headers.get('content-type') || '', /text\/css/);
+  const css = await cssResponse.text();
   assert.match(css, /@media\(max-width:960px\)/);
   assert.match(css, /@media\(max-width:640px\)/);
   assert.match(css, /:focus-visible/);
-  assert.match(cs, /prefers-reduced-motion/);
+  assert.match(css, /prefers-reduced-motion/);
 });
