@@ -1,4 +1,4 @@
-export const CANONICAL_CONSOLE_ORIGIN = 'https://console.relead.com.mx';
+export const CANONICAL_CONSOLE_ORIGIN = 'https://console.relnets.com';
 export const DEFAULT_CONSOLE_UI_ORIGIN = 'https://admin.relead.com.mx';
 
 // Transitional compatibility only. Canonical /v2 and /mcp never use this list.
