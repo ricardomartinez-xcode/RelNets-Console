@@ -1,16 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
 import worker from '../src/index.js';
 import { RELNET_NEXT_ROUTES, UI_STATES } from '../src/relnet-ui.js';
-import { BACKEND_DEPENDENCIES } from '../src/relnet-api.js';
 
-const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const request = (path) => new Request(`https://console.relnets.com${path}`, { headers: { accept: 'text/html' } });
+const html = async (path) => (await worker.fetch(request(path), {})).text();
 
-const request = (path) => new Request(`https://console.relead.com.mx${path}`, { headers: { accept: 'text/html' } });
-
-test('RelNet Next console route map is served locally, not proxied as legacy UI', async () => {
-  const expected = ['/console/relnet','/console/relnet/controllers','/console/relnet/nodes','/console/relnet/edge','/console/relnet/network','/console/relnet/access','/console/relnet/installation','/console/relnet/diagnostics','/console/relnet/migration','/console/relnet/ai'];
+test('Console serves only tenant-scoped product routes locally', async () => {
+  const expected = ['/console','/console/network','/console/nodes','/console/access','/console/billing'];
   assert.deepEqual(RELNET_NEXT_ROUTES, expected);
   for (const route of expected) {
     const response = await worker.fetch(request(route), {});
@@ -20,63 +17,62 @@ test('RelNet Next console route map is served locally, not proxied as legacy UI'
   }
 });
 
-test('console contains every required operational surface without fabricated live values', async () => {
-  const response = await worker.fetch(request('/console/relnet'), {});
-  const html = await response.text();
-  for (const label of ['Fleet','Controllers','Nodes','Edge','Network','Access','Installation','Diagnostics','Migration','RelNet AI']) assert.match(html, new RegExp(label, 'i'));
-  for (const term of ['topology generation','active-active','NetworkMap','Control Stream','RelDrop','RelShare','rollback','server-side']) assert.match(html, new RegExp(term, 'i'));
-  assert.match(html, /Backend dependency|Backend pendiente/i);
-  assert.doesNotMatch(html, /100% healthy|all systems operational|migration complete/i);
+test('Overview exposes user-plane navigation and never global fleet administration', async () => {
+  const page = await html('/console');
+  for (const label of ['Resumen','Mi red','Mis nodos','Acceso','Billing']) {
+    assert.match(page, new RegExp(label, 'i'));
+  }
+  for (const forbidden of ['Controller A','Controller B','Controller C','Controller D','Fleet','Migration','Edge services','global infrastructure']) {
+    assert.doesNotMatch(page, new RegExp(forbidden, 'i'));
+  }
+  assert.match(page, /API \+ MCP.*Northbound/is);
+  assert.match(page, /data-endpoint=["']\/v2\/me["']/);
+  assert.match(page, /data-endpoint=["']\/v2\/network["']/);
+  assert.match(page, /data-endpoint=["']\/v2\/nodes["']/);
 });
 
-test('mandatory UI states are explicit and retry is accessible', async () => {
-  assert.deepEqual(UI_STATES, ['loading','empty','offline','partial','degraded','blocked','error','retry','permission-denied','unsupported']);
-  const response = await worker.fetch(request('/console/relnet/diagnostics'), {});
-  const html = await response.text();
-  for (const state of UI_STATES) assert.match(html, new RegExp(`data-ui-state=["']${state}["']`));
-  assert.match(html, /aria-live=["']polite["']/);
-  assert.match(html, /<button[^>]+data-retry/);
-});
-
-test('typed API contract and backend dependency matrix exist and remain fail-closed', () => {
-  assert.equal(existsSync(new URL('../types/relnet-api.ts', import.meta.url)), true);
-  const typed = read('types/relnet-api.ts');
-  for (const name of ['FleetSnapshot','ControllerSnapshot','NodeSnapshot','EdgeServiceSnapshot','AccessSnapshot','InstallationSnapshot','DiagnosticsSnapshot','MigrationSnapshot','BillingSnapshot','AiEntitlementSnapshot','AiUsageSnapshot']) assert.match(typed, new RegExp(`interface ${name}`));
-  assert.ok(BACKEND_DEPENDENCIES.length >= 8);
-  for (const dep of BACKEND_DEPENDENCIES) {
-    assert.equal(dep.available, false, dep.id);
-    assert.match(dep.status, /backend-pending/);
+test('Network, nodes and billing consume canonical same-origin /v2 surfaces', async () => {
+  const network = await html('/console/network');
+  const nodes = await html('/console/nodes');
+  const billing = await html('/console/billing');
+  assert.match(network, /data-endpoint=["']\/v2\/network["']/);
+  assert.match(nodes, /data-endpoint=["']\/v2\/nodes["']/);
+  assert.match(billing, /data-endpoint=["']\/v2\/billing\/me["']/);
+  for (const page of [network, nodes, billing]) {
+    assert.doesNotMatch(page, /primary controller|secondary controller|platform:write|platform:execute/i);
   }
 });
 
-test('product AI is customer-safe and runtime truth is not invented', async () => {
-  const html = await (await worker.fetch(request('/console/relnet/ai'), {})).text();
-  for (const field of ['Effective plan','Subscription','AI included','Revenue gate','AI Credits','Usage','Remaining']) assert.match(html, new RegExp(field, 'i'));
-  assert.match(html, /sin endpoint|backend pendiente/i);
-  assert.doesNotMatch(html, /GGUF|RunPod|Qwen|tokens\/sec/i);
+test('Access page states the admin boundary explicitly', async () => {
+  const page = await html('/console/access');
+  assert.match(page, /platform:\*/i);
+  assert.match(page, /Builder/i);
+  assert.match(page, /scope.*ownership.*entitlem.*policy/is);
+  assert.doesNotMatch(page, /host admin|rescue global|global secrets/i);
 });
 
-test('migration UI exposes rollback and cutover but never legacy deletion', async () => {
-  const html = await (await worker.fetch(request('/console/relnet/migration'), {})).text();
-  for (const term of ['Legacy RelNet','RelNet Next','blockers','rollback','cutover']) assert.match(html, new RegExp(term, 'i'));
-  assert.doesNotMatch(html, /delete legacy|eliminar legacy|remove legacy/i);
+test('Mandatory UI states remain explicit and fail-closed client code handles Northbound outage', async () => {
+  assert.deepEqual(UI_STATES, ['loading','empty','offline','partial','degraded','blocked','error','retry','permission-denied','unsupported']);
+  const page = await html('/console');
+  assert.match(page, /relnet_northbound|Control Edge Northbound|Northbound/i);
+  assert.match(page, /response\.status === 503 \|\| response\.status === 502/);
+  assert.match(page, /permission-denied/);
+  assert.match(page, /credentials:["']same-origin["']/);
 });
 
-test('responsive and basic accessibility contracts are present', async () => {
-  const html = await (await worker.fetch(request('/console/relnet/nodes'), {})).text();
-  assert.match(html, /<main[^>]+id=["']main-content["']/);
-  assert.match(html, /aria-label=["']RelNet Next navigation["']/);
-  assert.match(html, /href=["']#main-content["']/);
-  assert.match(html, /aria-current=["']page["']/);
-  const css = read('src/relnet-ui.css');
-  assert.match(css, /@media\s*\(max-width:\s*960px\)/);
-  assert.match(css, /@media\s*\(max-width:\s*640px\)/);
+test('Console branding and served CSS preserve responsive accessibility contracts', async () => {
+  const page = await html('/console/nodes');
+  assert.match(page, /relead\.com\.mx\/relnet-brand-transparent\.png/);
+  assert.match(page, /<main[^>]+id=["']main-content["']/);
+  assert.match(page, /aria-label=["']Navegación de RelNet["']/);
+  assert.match(page, /href=["']#main-content["']/);
+
+  const cssResponse = await worker.fetch(request('/console/relnet/assets/ui.css'), {});
+  assert.equal(cssResponse.status, 200);
+  assert.match(cssResponse.headers.get('content-type') || '', /text\/css/);
+  const css = await cssResponse.text();
+  assert.match(css, /@media\(max-width:960px\)/);
+  assert.match(css, /@media\(max-width:640px\)/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion/);
-});
-
-test('deprecated app hostname is absent from runtime and new console contracts', () => {
-  for (const file of ['src/index.js','src/policy.js','src/relnet-ui.js','src/relnet-api.js','types/relnet-api.ts']) {
-    if (existsSync(new URL(`../${file}`, import.meta.url))) assert.doesNotMatch(read(file), /app\.relead\.com\.mx/);
-  }
 });

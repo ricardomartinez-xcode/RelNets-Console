@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Authenticated Cloudflare web application for RelNet v90.",
+  "description": "Authenticated ReLead user console for RelNet.",
   "scripts": {
     "test": "node --test",
     "check": "npm test && npm run build:worker",

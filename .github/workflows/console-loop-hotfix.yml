@@ -1,10 +1,11 @@
-name: Console Alias Loop Hotfix CI
+name: Console User Plane Boundary CI
 
 on:
   pull_request:
     paths:
       - 'src/**'
       - 'test/**'
+      - 'middleware.js'
       - 'README.md'
       - '.github/workflows/console-loop-hotfix.yml'
   push:
@@ -27,15 +28,16 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run check
-      - name: Prevent console self-loop regression
+      - name: Enforce Builder and user-plane separation
         run: |
-          grep -q "DEFAULT_CONSOLE_UI_ORIGIN = 'https://admin.relead.com.mx'" src/policy.js
-          grep -q 'assertDistinctUiOrigin' src/index.js
-          grep -q 'proxyConsoleUi' src/index.js
-          ! grep -n "redirect(canonicalConsoleUrl(url))" src/index.js
-      - name: Keep API traffic out of UI proxy
+          ! grep -q "'/admin/api/'" src/policy.js
+          ! grep -q "path === '/admin' || path.startsWith('/admin/')" src/policy.js
+          grep -q 'Builder/admin is intentionally not a Console surface' src/index.js
+          grep -q 'RELNET_NORTHBOUND_ORIGIN' middleware.js
+          grep -q 'USER_MCP_RESOURCE' middleware.js
+      - name: Keep canonical API and MCP on Northbound
         run: |
-          grep -q "'/admin/api/'" src/policy.js
-          grep -q "'/console/api/'" src/policy.js
-          grep -q "'/oauth/'" src/policy.js
-          grep -q "'/ws/'" src/policy.js
+          grep -q "'/v2'" middleware.js
+          grep -q "'/mcp'" middleware.js
+          grep -q 'proxyNorthbound' middleware.js
+          ! grep -q 'USER_MCP_ORIGIN' middleware.js

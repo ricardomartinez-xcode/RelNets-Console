@@ -1,14 +1,12 @@
 import {
   CANONICAL_CONSOLE_ORIGIN,
   assertDistinctUiOrigin,
-  canonicalConsoleUrl,
   isBackendProxyPath,
   isConsoleUiPath,
-  isPanelPath,
   localCanonicalTarget,
   normalizeOrigin,
   normalizeUiOrigin,
-  rewriteUiLocation
+  rewriteUiLocation,
 } from './policy.js';
 import { isLocalProductConsoleRoute, renderRelnetConsole } from './relnet-ui.js';
 import { RELNET_CSS } from './relnet-styles.js';
@@ -17,7 +15,7 @@ const SECURITY_HEADERS = {
   'cache-control': 'no-store',
   'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff',
-  'x-frame-options': 'DENY'
+  'x-frame-options': 'DENY',
 };
 
 function withSecurity(response) {
@@ -42,7 +40,7 @@ function upstreamRequest(request, target, incoming, upstreamOrigin, surface) {
     method: request.method,
     headers,
     body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
-    redirect: 'manual'
+    redirect: 'manual',
   });
 }
 
@@ -55,30 +53,26 @@ function rewriteBackendLocation(location, backendOrigin, incomingOrigin) {
     return location;
   }
   if (resolved.origin !== backendOrigin) return location;
-  if (!isPanelPath(resolved.pathname)) return location;
-  return canonicalConsoleUrl(resolved, incomingOrigin).toString();
+  return new URL(`${resolved.pathname}${resolved.search}${resolved.hash}`, incomingOrigin).toString();
 }
 
 async function proxyBackend(request, env) {
   const incoming = new URL(request.url);
   const backendOrigin = normalizeOrigin(env.BACKEND_ORIGIN);
-  let backendPath = incoming.pathname;
-  if (backendPath === '/console/auth') backendPath = '/console/login';
-  if (backendPath === '/admin/auth') backendPath = '/admin/login';
-  const target = new URL(`${backendPath}${incoming.search}`, `${backendOrigin}/`);
-  const upstream = await fetch(upstreamRequest(request, target, incoming, backendOrigin, incoming.pathname.startsWith('/admin') ? 'admin-api' : 'console-api'));
+  const target = new URL(`${incoming.pathname}${incoming.search}`, `${backendOrigin}/`);
+  const upstream = await fetch(upstreamRequest(request, target, incoming, backendOrigin, 'console-compat-api'));
   if (upstream.status === 101) return upstream;
 
-  const responseHeaders = new Headers(upstream.headers);
-  const location = rewriteBackendLocation(responseHeaders.get('location'), backendOrigin, incoming.origin);
-  if (location) responseHeaders.set('location', location);
-  responseHeaders.set('cache-control', 'no-store');
-  responseHeaders.set('x-relead-edge', 'relead-app-v90-backend-proxy');
-  responseHeaders.set('x-content-type-options', 'nosniff');
+  const headers = new Headers(upstream.headers);
+  const location = rewriteBackendLocation(headers.get('location'), backendOrigin, incoming.origin);
+  if (location) headers.set('location', location);
+  headers.set('cache-control', 'no-store');
+  headers.set('x-relead-edge', 'relead-app-console-compat-api');
+  headers.set('x-content-type-options', 'nosniff');
   return new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
-    headers: responseHeaders
+    headers,
   });
 }
 
@@ -87,77 +81,89 @@ async function proxyConsoleUi(request, env) {
   const uiOrigin = normalizeUiOrigin(env.CONSOLE_UI_ORIGIN);
   assertDistinctUiOrigin(incoming.origin, uiOrigin);
   const target = new URL(`${incoming.pathname}${incoming.search}`, `${uiOrigin}/`);
-  const upstream = await fetch(upstreamRequest(request, target, incoming, uiOrigin, 'console-ui'));
+  const upstream = await fetch(upstreamRequest(request, target, incoming, uiOrigin, 'console-compat-ui'));
   if (upstream.status === 101) return upstream;
 
-  const responseHeaders = new Headers(upstream.headers);
-  const location = rewriteUiLocation(responseHeaders.get('location'), incoming.origin, uiOrigin);
-  if (location) responseHeaders.set('location', location);
-  responseHeaders.set('cache-control', 'no-store');
-  responseHeaders.set('x-relead-edge', 'relead-app-v90-console-proxy');
-  responseHeaders.set('x-content-type-options', 'nosniff');
+  const headers = new Headers(upstream.headers);
+  const location = rewriteUiLocation(headers.get('location'), incoming.origin, uiOrigin);
+  if (location) headers.set('location', location);
+  headers.set('cache-control', 'no-store');
+  headers.set('x-relead-edge', 'relead-app-console-compat-ui');
+  headers.set('x-content-type-options', 'nosniff');
   return new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
-    headers: responseHeaders
+    headers,
   });
 }
 
-export function canonicalTarget(url) {
-  const incoming = url instanceof URL ? url : new URL(String(url));
+export function canonicalTarget(value) {
+  const incoming = value instanceof URL ? new URL(value) : new URL(String(value));
   if (incoming.pathname === '/') return new URL('/console/', incoming.origin);
-  if (incoming.pathname === '/admin' || incoming.pathname === '/admin/' || incoming.pathname.startsWith('/admin/')) {
-    return localCanonicalTarget(incoming);
-  }
+  if (isLocalProductConsoleRoute(incoming.pathname)) return localCanonicalTarget(incoming);
   if (isConsoleUiPath(incoming.pathname)) return localCanonicalTarget(incoming);
   return null;
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env = {}) {
     const url = new URL(request.url);
 
     try {
       if (url.pathname === '/healthz') {
         return withSecurity(Response.json({
           status: 'ok',
-          edge: 'relead-app-v90-console-proxy',
+          edge: 'relead-app-user-console',
           canonical_console: CANONICAL_CONSOLE_ORIGIN,
-          ui_upstream: normalizeUiOrigin(env.CONSOLE_UI_ORIGIN)
+          northbound_contract: '/v2 + /mcp',
         }));
       }
 
       if (url.pathname === '/') return redirect(new URL('/console/', url), 302);
 
       if (url.pathname === '/console/relnet/assets/ui.css') {
-        return withSecurity(new Response(RELNET_CSS, { status: 200, headers: { 'content-type': 'text/css; charset=utf-8', 'x-relead-surface': 'relnet-next-console' } }));
-      }
-      if (['GET', 'HEAD'].includes(request.method) && isLocalProductConsoleRoute(url.pathname)) {
-        return withSecurity(new Response(renderRelnetConsole(url.pathname), { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'x-relead-surface': 'relnet-next-console' } }));
+        return withSecurity(new Response(RELNET_CSS, {
+          status: 200,
+          headers: {
+            'content-type': 'text/css; charset=utf-8',
+            'x-relead-surface': 'relnet-next-console',
+          },
+        }));
       }
 
-      // APIs, OAuth/Auth and non-GET legacy login remain backend traffic.
+      if (['GET', 'HEAD'].includes(request.method) && isLocalProductConsoleRoute(url.pathname)) {
+        return withSecurity(new Response(renderRelnetConsole(url.pathname), {
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'x-relead-surface': 'relnet-next-console',
+          },
+        }));
+      }
+
+      // Compatibility-only paths. The canonical user API and MCP are handled by middleware
+      // and proxy to Control Edge Northbound through RELNET_NORTHBOUND_ORIGIN.
       if (isBackendProxyPath(url.pathname, request.method)) return proxyBackend(request, env);
 
-      // Canonicalize graphical Admin URLs locally, never to another hostname.
-      if (['GET', 'HEAD'].includes(request.method) && (url.pathname === '/admin' || url.pathname.startsWith('/admin/'))) {
-        return redirect(localCanonicalTarget(url), url.pathname === '/admin/login' ? 302 : 308);
+      if (['GET', 'HEAD'].includes(request.method) && isConsoleUiPath(url.pathname)) {
+        return proxyConsoleUi(request, env);
       }
 
-      // The console custom domain currently belongs to this edge project. Proxy the
-      // real UI internally instead of redirecting back to console.relead.com.mx.
-      if (isConsoleUiPath(url.pathname)) return proxyConsoleUi(request, env);
+      // Builder/admin is intentionally not a Console surface.
+      if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+        return withSecurity(Response.json({ detail: 'Not found' }, { status: 404 }));
+      }
 
       return withSecurity(Response.json({
         detail: 'Not found',
-        canonical_console: CANONICAL_CONSOLE_ORIGIN
+        canonical_console: CANONICAL_CONSOLE_ORIGIN,
       }, { status: 404 }));
     } catch (error) {
-      console.error('relead-app proxy error', error);
+      console.error('relead user console error', error);
       return withSecurity(Response.json({
-        detail: 'Console edge unavailable',
-        canonical_console: CANONICAL_CONSOLE_ORIGIN
+        detail: 'Console unavailable',
+        canonical_console: CANONICAL_CONSOLE_ORIGIN,
       }, { status: 502 }));
     }
-  }
+  },
 };
