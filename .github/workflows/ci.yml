@@ -6,7 +6,6 @@ on:
   push:
     branches:
       - main
-      - fix/v90-canonical-console-redirects
 
 permissions:
   contents: read
@@ -26,5 +25,6 @@ jobs:
       - run: npm run check
       - name: Guard canonical naming
         run: |
-          grep -Rni 'console.relead.com.mx' src test
+          grep -Rni 'console.relnets.com' src test
+          ! grep -Rni --exclude-dir=node_modules 'console.relead.com.mx' src test
           ! grep -Rni --exclude-dir=node_modules 'My RelNet' src test
