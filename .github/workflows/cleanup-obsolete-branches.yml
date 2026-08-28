@@ -1,0 +1,44 @@
+name: Cleanup obsolete Console branches
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Close obsolete PR lines
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for pr in 10 13 14; do
+            if gh pr view "$pr" --json state --jq '.state' 2>/dev/null | grep -q 'OPEN'; then
+              gh pr close "$pr" --comment "Superseded by the canonical Production Console state consolidated on main." >/dev/null
+            fi
+          done
+      - name: Delete superseded branches
+        run: |
+          set -euo pipefail
+          branches=(
+            "agent/monetization-ads-20260820"
+            "agent/relead-commercial-billing-frontend-20260820"
+            "feat/auth-gated-console-20260825"
+            "feat/relnet-stripe-billing-console-20260826"
+            "feat/v90-authenticated-control-plane"
+            "fix/v90-auth-api-mcp-staging-20260817"
+            "fix/v90-console-user-bff-20260817"
+            "integration/v90-unified"
+          )
+          for branch in "${branches[@]}"; do
+            if git ls-remote --exit-code --heads origin "$ref" >/dev/null 2>&1; then
+              git push origin --delete "$branch"
+            fi
+          done
