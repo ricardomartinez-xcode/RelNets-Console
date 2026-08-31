@@ -86,6 +86,15 @@ function clearCookie(name) {
   return `${name}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
+function forwardedRequest(target, request, init = {}) {
+  const next = { ...init, method: request.method };
+  if (!['GET', 'HEAD'].includes(request.method) && request.body) {
+    next.body = request.body;
+    next.duplex = 'half';
+  }
+  return new Request(target, next);
+}
+
 function redirect(location, status = 302, cookies = []) {
   const headers = new Headers({
     location,
@@ -177,10 +186,8 @@ async function proxyIdentity(request) {
   const target = new URL(`${incoming.pathname}${incoming.search}`, `${IDENTITY_API_ORIGIN}/`);
   const headers = new Headers(request.headers);
   headers.delete('host');
-  const upstream = await fetch(new Request(target, {
-    method: request.method,
+  const upstream = await fetch(forwardedRequest(target, request, {
     headers,
-    body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
     redirect: 'manual',
   }));
   const out = new Headers(upstream.headers);
@@ -295,10 +302,8 @@ function internalRequest(request, pathname, bearer) {
   const headers = new Headers(request.headers);
   if (bearer) headers.set('authorization', `Bearer ${bearer}`);
   headers.set('x-relead-authenticated-surface', 'console');
-  return new Request(target, {
-    method: request.method,
+  return forwardedRequest(target, request, {
     headers,
-    body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
     redirect: 'manual',
   });
 }
@@ -335,10 +340,8 @@ async function proxyNorthbound(request, bearer, surface) {
   headers.set('authorization', `Bearer ${bearer}`);
   headers.set('x-relead-proxy-surface', surface);
   try {
-    return await fetch(new Request(target, {
-      method: request.method,
+    return await fetch(forwardedRequest(target, request, {
       headers,
-      body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
       redirect: 'manual',
     }));
   } catch {
@@ -405,6 +408,10 @@ export default async function middleware(request) {
   if (legacy) return legacy;
 
   const url = new URL(request.url);
+  if (url.pathname === '/billing') {
+    url.pathname = '/dashboard/billing';
+    return redirect(url.toString(), 308);
+  }
   if (PUBLIC_IDENTITY_PATHS.has(url.pathname)) return proxyIdentity(request);
   if (url.pathname === '/logout') return logout(request);
   if (url.pathname === '/auth/start') return startOAuth(request);
