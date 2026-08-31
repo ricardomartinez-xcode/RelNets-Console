@@ -6,6 +6,7 @@ on:
       - 'src/**'
       - 'test/**'
       - 'middleware.js'
+      - 'middleware-impl.js'
       - 'README.md'
       - '.github/workflows/console-loop-hotfix.yml'
   push:
@@ -30,14 +31,14 @@ jobs:
       - run: npm run check
       - name: Enforce Builder and user-plane separation
         run: |
-          ! grep -q "'/admin/api/'" src/policy.js
+          ! grep -q "'/admin/api/" src/policy.js
           ! grep -q "path === '/admin' || path.startsWith('/admin/')" src/policy.js
           grep -q 'Builder/admin is intentionally not a Console surface' src/index.js
-          grep -q 'RELNET_NORTHBOUND_ORIGIN' middleware.js
-          grep -q 'USER_MCP_RESOURCE' middleware.js
+          grep -q 'RELNET_NORTHBOUND_ORIGIN' middleware.js middleware-impl.js
+          grep -q 'USER_MCP_RESOURCE' middleware.js middleware-impl.js
       - name: Keep canonical API and MCP on Northbound
         run: |
-          grep -q "'/v2'" middleware.js
-          grep -q "'/mcp'" middleware.js
-          grep -q 'proxyNorthbound' middleware.js
-          ! grep -q 'USER_MCP_ORIGIN' middleware.js
+          grep -q "'/v2'" middleware.js middleware-impl.js
+          grep -q "'/mcp'" middleware.js middleware-impl.js
+          grep -q 'proxyNorthbound' middleware.js middleware-impl.js
+          ! grep -q 'USER_MCP_ORIGIN' middleware.js middleware-impl.js
