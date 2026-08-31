@@ -2,21 +2,23 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import process from 'node:process';
 import worker from './src/index.js';
 
-const AUTH_ISSUER = 'https://auth.relnets.com';
-const ACCESS_URL = `${AUTH_ISSUER}/access`;
-const AUTHORIZE_URL = `${AUTH_ISSUER}/oauth/authorize`;
-const TOKEN_URL = `${AUTH_ISSUER}/oauth/token`;
-const USERINFO_URL = `${AUTH_ISSUER}/userinfo`;
+export const CONSOLE_ORIGIN = 'https://console.relnets.com';
+export const IDENTITY_API_ORIGIN = 'https://api.console.relnets.com';
+const AUTH_ISSUER = CONSOLE_ORIGIN;
+const AUTHORIZE_URL = `${CONSOLE_ORIGIN}/oauth/authorize`;
+const TOKEN_URL = `${IDENTITY_API_ORIGIN}/oauth/token`;
+const USERINFO_URL = `${IDENTITY_API_ORIGIN}/oauth/userinfo`;
 const CLIENT_ID = 'relead-console';
-const REDIRECT_URI = 'https://console.relnets.com/auth/callback';
+const REDIRECT_URI = `${CONSOLE_ORIGIN}/auth/callback`;
 
 export const USER_API_RESOURCE = 'https://console.relnets.com/v2';
 export const USER_MCP_RESOURCE = 'https://console.relnets.com/mcp';
 
-const UI_SCOPES = [
+const UI_SCOPE_LIST = [
   'openid',
   'profile',
   'email',
+  'offline_access',
   'relnet.profile.read',
   'relnet.nodes.read',
   'relnet.nodes.enroll',
@@ -24,11 +26,31 @@ const UI_SCOPES = [
   'relnet.network.read',
   'relnet.network.manage',
   'relnet.ssh.execute',
-].join(' ');
+  'billing.read',
+  'billing.write',
+];
+const UI_SCOPES = UI_SCOPE_LIST.join(' ');
 
 const PKCE_COOKIE = '__Host-relead_console_pkce';
 const STATE_COOKIE = '__Host-relead_console_state';
+const RETURN_COOKIE = '__Host-relead_console_return_to';
 const ACCESS_TOKEN_COOKIE = '__Host-relead_console_at';
+const REFRESH_TOKEN_COOKIE = '__Host-relead_console_rt';
+const IDENTITY_SESSION_COOKIE = '__Host-relnets_console_session';
+const IDENTITY_CSRF_COOKIE = '__Host-relnets_console_csrf';
+
+const PUBLIC_IDENTITY_PATHS = new Set([
+  '/.well-known/openid-configuration',
+  '/.well-known/jwks.json',
+  '/oauth/jwks',
+  '/oauth/authorize',
+  '/oauth/token',
+  '/oauth/userinfo',
+  '/oauth/revoke',
+  '/oauth/session',
+  '/login',
+  '/signup',
+]);
 
 export const config = { runtime: 'nodejs' };
 
@@ -71,8 +93,33 @@ function redirect(location, status = 302, cookies = []) {
     'referrer-policy': 'no-referrer',
     'x-content-type-options': 'nosniff',
   });
-  for (const cookie of cookies) headers.append('set-cookie', cookie);
+  for (const value of cookies) headers.append('set-cookie', value);
   return new Response(null, { status, headers });
+}
+
+export function safeReturnTo(value) {
+  const raw = String(value || '').trim();
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/dashboard';
+  let parsed;
+  try {
+    parsed = new URL(raw, CONSOLE_ORIGIN);
+  } catch {
+    return '/dashboard';
+  }
+  if (parsed.origin !== CONSOLE_ORIGIN) return '/dashboard';
+  if (parsed.pathname !== '/dashboard' && !parsed.pathname.startsWith('/dashboard/')) return '/dashboard';
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+export function parseBillingIntent(value) {
+  const url = value instanceof URL ? value : new URL(String(value), CONSOLE_ORIGIN);
+  if (url.pathname !== '/dashboard/billing') return null;
+  if (url.searchParams.get('intent') !== 'checkout') return null;
+  const plan = url.searchParams.get('plan');
+  const interval = url.searchParams.get('interval');
+  if (!['pro', 'team'].includes(plan)) return null;
+  if (!['month', 'year'].includes(interval)) return null;
+  return { plan, interval };
 }
 
 export function buildAuthorizeUrl(state, verifier) {
@@ -92,7 +139,7 @@ export function buildAuthorizeUrl(state, verifier) {
 export function resourceMetadata(resource, scopes) {
   return {
     resource,
-    authorization_servers: [AUTH_ISSUER],
+    authorization_servers: [CONSOLE_ORIGIN],
     scopes_supported: scopes,
     bearer_methods_supported: ['header'],
   };
@@ -104,26 +151,59 @@ function metadataResponse(resource, scopes) {
   });
 }
 
-function challenge(metadataPath, scope = 'relnet.profile.read') {
-  return `Bearer resource_metadata="https://console.relnets.com${metadataPath}", scope="${scope}"`;
-}
-
-function unauthorized(metadataPath, scope) {
+function unauthorized(metadataPath, scope = 'relnet.profile.read') {
   return Response.json({ error: 'authorization_required' }, {
     status: 401,
     headers: {
       'cache-control': 'no-store',
-      'www-authenticate': challenge(metadataPath, scope),
+      'www-authenticate': `Bearer resource_metadata="${CONSOLE_ORIGIN}${metadataPath}", scope="${scope}"`,
     },
   });
 }
 
-async function startOAuth() {
+function rewriteIdentityLocation(location) {
+  if (!location) return null;
+  try {
+    const resolved = new URL(location, `${IDENTITY_API_ORIGIN}/`);
+    if (resolved.origin === IDENTITY_API_ORIGIN) {
+      return `${CONSOLE_ORIGIN}${resolved.pathname}${resolved.search}${resolved.hash}`;
+    }
+  } catch {}
+  return location;
+}
+
+async function proxyIdentity(request) {
+  const incoming = new URL(request.url);
+  const target = new URL(`${incoming.pathname}${incoming.search}`, `${IDENTITY_API_ORIGIN}/`);
+  const headers = new Headers(request.headers);
+  headers.delete('host');
+  const upstream = await fetch(new Request(target, {
+    method: request.method,
+    headers,
+    body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+    redirect: 'manual',
+  }));
+  const out = new Headers(upstream.headers);
+  const location = rewriteIdentityLocation(out.get('location'));
+  if (location) out.set('location', location);
+  out.set('cache-control', upstream.status >= 300 && upstream.status < 400 ? 'no-store' : (out.get('cache-control') || 'no-store'));
+  out.set('x-content-type-options', 'nosniff');
+  return new Response(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: out,
+  });
+}
+
+async function startOAuth(request) {
+  const url = new URL(request.url);
   const state = randomToken(24);
   const verifier = randomToken(48);
+  const returnTo = safeReturnTo(url.searchParams.get('return_to'));
   return redirect(buildAuthorizeUrl(state, verifier).toString(), 302, [
     secureCookie(STATE_COOKIE, state, 600),
     secureCookie(PKCE_COOKIE, verifier, 600),
+    secureCookie(RETURN_COOKIE, encodeURIComponent(returnTo), 600),
   ]);
 }
 
@@ -131,13 +211,15 @@ async function finishOAuth(request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
-  const cookie = request.headers.get('cookie');
-  const expectedState = cookieValue(cookie, STATE_COOKIE);
-  const verifier = cookieValue(cookie, PKCE_COOKIE);
-  const clear = [clearCookie(STATE_COOKIE), clearCookie(PKCE_COOKIE)];
+  const cookies = request.headers.get('cookie');
+  const expectedState = cookieValue(cookies, STATE_COOKIE);
+  const verifier = cookieValue(cookies, PKCE_COOKIE);
+  const encodedReturn = cookieValue(cookies, RETURN_COOKIE);
+  const clear = [clearCookie(STATE_COOKIE), clearCookie(PKCE_COOKIE), clearCookie(RETURN_COOKIE)];
+  const returnTo = safeReturnTo(encodedReturn ? decodeURIComponent(encodedReturn) : '/dashboard');
 
   if (!code || !state || !expectedState || !verifier || !safeEqual(state, expectedState)) {
-    return redirect(ACCESS_URL, 303, clear);
+    return redirect(`/auth/start?return_to=${encodeURIComponent(returnTo)}`, 303, clear);
   }
 
   const body = new URLSearchParams({
@@ -146,33 +228,29 @@ async function finishOAuth(request) {
     code,
     redirect_uri: REDIRECT_URI,
     code_verifier: verifier,
-    resource: USER_API_RESOURCE,
   });
-
-  const response = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-      accept: 'application/json',
-    },
-    body,
-    redirect: 'manual',
-  });
-
-  if (!response.ok) return redirect(ACCESS_URL, 303, clear);
+  let response;
+  try {
+    response = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+      body,
+      redirect: 'manual',
+    });
+  } catch {
+    return redirect(`/auth/start?return_to=${encodeURIComponent(returnTo)}`, 303, clear);
+  }
+  if (!response.ok) return redirect(`/auth/start?return_to=${encodeURIComponent(returnTo)}`, 303, clear);
 
   const payload = await response.json();
-  const token = typeof payload?.access_token === 'string' ? payload.access_token : '';
-  if (!token) return redirect(ACCESS_URL, 303, clear);
-
-  const expiresIn = Number.isFinite(Number(payload.expires_in))
-    ? Math.max(60, Math.min(900, Number(payload.expires_in)))
-    : 900;
-
-  return redirect('https://console.relnets.com/dashboard', 303, [
-    ...clear,
-    secureCookie(ACCESS_TOKEN_COOKIE, token, Math.max(30, expiresIn - 30)),
-  ]);
+  const accessToken = typeof payload?.access_token === 'string' ? payload.access_token : '';
+  if (!accessToken) return redirect(`/auth/start?return_to=${encodeURIComponent(returnTo)}`, 303, clear);
+  const expiresIn = Number.isFinite(Number(payload.expires_in)) ? Math.max(60, Math.min(900, Number(payload.expires_in))) : 900;
+  const set = [...clear, secureCookie(ACCESS_TOKEN_COOKIE, accessToken, Math.max(30, expiresIn - 30))];
+  if (typeof payload.refresh_token === 'string' && payload.refresh_token) {
+    set.push(secureCookie(REFRESH_TOKEN_COOKIE, payload.refresh_token, 30 * 86400));
+  }
+  return redirect(`${CONSOLE_ORIGIN}${returnTo}`, 303, set);
 }
 
 async function validBrowserToken(token) {
@@ -204,6 +282,13 @@ function legacyConsoleRoute(request) {
   return redirect(url.toString(), 308);
 }
 
+function workerEnv() {
+  const env = {};
+  if (process.env.BACKEND_ORIGIN) env.BACKEND_ORIGIN = process.env.BACKEND_ORIGIN;
+  if (process.env.CONSOLE_UI_ORIGIN) env.CONSOLE_UI_ORIGIN = process.env.CONSOLE_UI_ORIGIN;
+  return env;
+}
+
 function internalRequest(request, pathname, bearer) {
   const target = new URL(request.url);
   target.pathname = pathname;
@@ -216,13 +301,6 @@ function internalRequest(request, pathname, bearer) {
     body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
     redirect: 'manual',
   });
-}
-
-function workerEnv() {
-  const env = {};
-  if (process.env.BACKEND_ORIGIN) env.BACKEND_ORIGIN = process.env.BACKEND_ORIGIN;
-  if (process.env.CONSOLE_UI_ORIGIN) env.CONSOLE_UI_ORIGIN = process.env.CONSOLE_UI_ORIGIN;
-  return env;
 }
 
 export function normalizeNorthboundOrigin(value = process.env.RELNET_NORTHBOUND_ORIGIN) {
@@ -248,23 +326,14 @@ async function proxyNorthbound(request, bearer, surface) {
   try {
     target = buildNorthboundTarget(request.url, process.env.RELNET_NORTHBOUND_ORIGIN);
   } catch {
-    return Response.json({ error: 'northbound_configuration_invalid' }, {
-      status: 503,
-      headers: { 'cache-control': 'no-store' },
-    });
+    return Response.json({ error: 'northbound_configuration_invalid' }, { status: 503, headers: { 'cache-control': 'no-store' } });
   }
-  if (!target) {
-    return Response.json({ error: 'relnet_northbound_pending' }, {
-      status: 503,
-      headers: { 'cache-control': 'no-store' },
-    });
-  }
-
+  if (!target) return Response.json({ error: 'relnet_northbound_pending' }, { status: 503, headers: { 'cache-control': 'no-store' } });
   const headers = new Headers(request.headers);
   headers.delete('cookie');
+  headers.delete('host');
   headers.set('authorization', `Bearer ${bearer}`);
   headers.set('x-relead-proxy-surface', surface);
-
   try {
     return await fetch(new Request(target, {
       method: request.method,
@@ -273,68 +342,115 @@ async function proxyNorthbound(request, bearer, surface) {
       redirect: 'manual',
     }));
   } catch {
-    return Response.json({ error: 'relnet_northbound_unavailable' }, {
-      status: 502,
-      headers: { 'cache-control': 'no-store' },
-    });
+    return Response.json({ error: 'relnet_northbound_unavailable' }, { status: 502, headers: { 'cache-control': 'no-store' } });
   }
+}
+
+async function startBillingCheckout(request, bearer, intent) {
+  let origin;
+  try {
+    origin = normalizeNorthboundOrigin(process.env.RELNET_NORTHBOUND_ORIGIN);
+  } catch {
+    return redirect('/dashboard/billing?billing=configuration_error', 303);
+  }
+  if (!origin) return redirect('/dashboard/billing?billing=unavailable', 303);
+  const target = new URL('/v2/billing/checkout', `${origin}/`);
+  let response;
+  try {
+    response = await fetch(target, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${bearer}`,
+        'content-type': 'application/json',
+        accept: 'application/json',
+        'x-relead-proxy-surface': 'billing-intent',
+      },
+      body: JSON.stringify({ plan_slug: intent.plan, billing_interval: intent.interval }),
+      redirect: 'manual',
+    });
+  } catch {
+    return redirect('/dashboard/billing?billing=unavailable', 303);
+  }
+  if (response.status === 401) {
+    return redirect(`/auth/start?return_to=${encodeURIComponent(new URL(request.url).pathname + new URL(request.url).search)}`, 303, [clearCookie(ACCESS_TOKEN_COOKIE)]);
+  }
+  if (!response.ok) return redirect(`/dashboard/billing?billing=checkout_error&status=${response.status}`, 303);
+  let payload;
+  try { payload = await response.json(); } catch { return redirect('/dashboard/billing?billing=checkout_error', 303); }
+  const checkoutUrl = typeof payload?.url === 'string' ? payload.url : '';
+  if (!checkoutUrl.startsWith('https://checkout.stripe.com/')) return redirect('/dashboard/billing?billing=checkout_error', 303);
+  return redirect(checkoutUrl, 303);
+}
+
+async function logout(request) {
+  try {
+    await proxyIdentity(new Request(new URL('/logout', IDENTITY_API_ORIGIN), {
+      method: 'POST',
+      headers: { cookie: request.headers.get('cookie') || '' },
+      redirect: 'manual',
+    }));
+  } catch {}
+  return redirect('/login', 303, [
+    clearCookie(ACCESS_TOKEN_COOKIE),
+    clearCookie(REFRESH_TOKEN_COOKIE),
+    clearCookie(IDENTITY_SESSION_COOKIE),
+    clearCookie(IDENTITY_CSRF_COOKIE),
+  ]);
 }
 
 export default async function middleware(request) {
   const canonical = canonicalizeHost(request);
   if (canonical) return canonical;
-
   const legacy = legacyConsoleRoute(request);
   if (legacy) return legacy;
 
   const url = new URL(request.url);
-
-  if (url.pathname === '/healthz') return worker.fetch(request, workerEnv());
-  if (url.pathname === '/auth/start') return startOAuth();
+  if (PUBLIC_IDENTITY_PATHS.has(url.pathname)) return proxyIdentity(request);
+  if (url.pathname === '/logout') return logout(request);
+  if (url.pathname === '/auth/start') return startOAuth(request);
   if (url.pathname === '/auth/callback') return finishOAuth(request);
 
   if (url.pathname === '/.well-known/oauth-protected-resource/v2') {
-    return metadataResponse(USER_API_RESOURCE, UI_SCOPES.split(' '));
+    return metadataResponse(USER_API_RESOURCE, UI_SCOPE_LIST);
   }
   if (url.pathname === '/.well-known/oauth-protected-resource/mcp') {
-    return metadataResponse(
-      USER_MCP_RESOURCE,
-      UI_SCOPES.split(' ').filter((scope) => scope !== 'offline_access'),
-    );
+    return metadataResponse(USER_MCP_RESOURCE, UI_SCOPE_LIST.filter((scope) => scope !== 'offline_access'));
   }
 
   if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
-    const header = request.headers.get('authorization') || '';
-    const bearer = /^Bearer\s+(\S+)$/i.exec(header)?.[1] || '';
-    if (!bearer) {
-      return unauthorized('/.well-known/oauth-protected-resource/mcp', 'relnet.profile.read');
-    }
-    return proxyNorthbound(request, bearer, 'mcp');
+    const match = /^Bearer\s+(\S+)$/i.exec(request.headers.get('authorization') || '');
+    if (!match) return unauthorized('/.well-known/oauth-protected-resource/mcp', 'relnet.profile.read');
+    return proxyNorthbound(request, match[1], 'mcp');
   }
 
   const browserToken = cookieValue(request.headers.get('cookie'), ACCESS_TOKEN_COOKIE);
 
   if (url.pathname === '/v2' || url.pathname.startsWith('/v2/')) {
-    const header = request.headers.get('authorization');
-    const bearer = /^Bearer\s+(.+)$/i.exec(header || '')?.[1] || browserToken;
-    if (!bearer) {
-      return unauthorized('/.well-known/oauth-protected-resource/v2', 'relnet.profile.read');
-    }
+    const match = /^Bearer\s+(\S+)$/i.exec(request.headers.get('authorization') || '');
+    const bearer = match?.[1] || browserToken;
+    if (!bearer) return unauthorized('/.well-known/oauth-protected-resource/v2', 'relnet.profile.read');
     return proxyNorthbound(request, bearer, 'api-v2');
   }
 
+  if (url.pathname === '/healthz') return worker.fetch(request, workerEnv());
+
   if (!browserToken || !(await validBrowserToken(browserToken))) {
-    return redirect(ACCESS_URL, 302, browserToken ? [clearCookie(ACCESS_TOKEN_COOKIE)] : []);
+    const clear = browserToken ? [clearCookie(ACCESS_TOKEN_COOKIE), clearCookie(REFRESH_TOKEN_COOKIE)] : [];
+    const returnTo = safeReturnTo(`${url.pathname}${url.search}`);
+    return redirect(`/auth/start?return_to=${encodeURIComponent(returnTo)}`, 302, clear);
   }
 
-  if (url.pathname === '/') {
-    return redirect('https://console.relnets.com/dashboard', 302);
-  }
+  const billingIntent = parseBillingIntent(url);
+  if (billingIntent) return startBillingCheckout(request, browserToken, billingIntent);
 
+  if (url.pathname === '/') return redirect('/dashboard', 302);
+  if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+    return Response.json({ detail: 'Not found' }, { status: 404, headers: { 'cache-control': 'no-store' } });
+  }
   if (url.pathname === '/dashboard' || url.pathname.startsWith('/dashboard/')) {
     const internalPath = '/console' + url.pathname.slice('/dashboard'.length);
     return worker.fetch(internalRequest(request, internalPath || '/console/', browserToken), workerEnv());
   }
 
-  return redirect('https://console.relnets.com/dashboard', 302);
+  return redirect('/dashboard', 302);
 }
