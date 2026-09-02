@@ -6,6 +6,8 @@ export const config = { runtime: 'nodejs' };
 const ACCESS_COOKIE = '__Host-relead_console_at';
 const LEGACY_ACCOUNT_URL = 'https://auth.relnets.com/access';
 const LOCAL_ACCOUNT_URL = '/dashboard/access';
+const CORE_READINESS_KEYS = ['database', 'scheduler', 'identity'];
+const OPTIONAL_READINESS_KEYS = ['auth', 'billing'];
 
 function isIdentityPath(pathname) {
   return pathname === '/login'
@@ -32,14 +34,25 @@ export function readinessTarget(request) {
   return new URL(`/readyz${incoming.search}`, `${IDENTITY_API_ORIGIN}/`);
 }
 
+export function classifyReadiness(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return { coreReady: false, degraded: [] };
+  }
+  const coreReady = CORE_READINESS_KEYS.every((key) => payload[key] === true);
+  const degraded = OPTIONAL_READINESS_KEYS.filter((key) => payload[key] !== true);
+  return { coreReady, degraded };
+}
+
 export async function proxyReadiness(request) {
   const target = readinessTarget(request);
   if (!target) return null;
 
   try {
-    const method = request.method === 'HEAD' ? 'HEAD' : 'GET';
+    const clientMethod = request.method === 'HEAD' ? 'HEAD' : 'GET';
+    // Always GET upstream so HEAD callers receive the same readiness status
+    // classification without requiring the upstream to implement HEAD semantics.
     const upstream = await fetch(target, {
-      method,
+      method: 'GET',
       headers: { accept: 'application/json' },
       redirect: 'manual',
     });
@@ -47,7 +60,27 @@ export async function proxyReadiness(request) {
     clearEncodingHeaders(headers);
     headers.set('cache-control', 'no-store');
     headers.set('x-content-type-options', 'nosniff');
-    return new Response(method === 'HEAD' ? null : upstream.body, {
+
+    if (upstream.status === 503) {
+      const payload = await upstream.clone().json().catch(() => null);
+      const { coreReady, degraded } = classifyReadiness(payload);
+      if (coreReady) {
+        headers.set('content-type', 'application/json; charset=utf-8');
+        headers.set('x-relnets-readiness', 'core-ready-degraded');
+        const body = JSON.stringify({
+          ...payload,
+          status: 'ready',
+          degraded,
+          upstream_status: payload?.status || 'not_ready',
+        });
+        return new Response(clientMethod === 'HEAD' ? null : body, {
+          status: 200,
+          headers,
+        });
+      }
+    }
+
+    return new Response(clientMethod === 'HEAD' ? null : upstream.body, {
       status: upstream.status,
       statusText: upstream.statusText,
       headers,
