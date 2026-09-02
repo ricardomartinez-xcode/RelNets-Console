@@ -1,4 +1,4 @@
-import originalMiddleware, { safeReturnTo } from './middleware-impl.js';
+import originalMiddleware, { IDENTITY_API_ORIGIN, safeReturnTo } from './middleware-impl.js';
 export * from './middleware-impl.js';
 
 export const config = { runtime: 'nodejs' };
@@ -24,6 +24,43 @@ function clearEncodingHeaders(headers) {
   headers.delete('content-length');
   headers.delete('content-encoding');
   headers.delete('transfer-encoding');
+}
+
+export function readinessTarget(request) {
+  const incoming = new URL(request.url);
+  if (incoming.pathname !== '/readyz') return null;
+  return new URL(`/readyz${incoming.search}`, `${IDENTITY_API_ORIGIN}/`);
+}
+
+export async function proxyReadiness(request) {
+  const target = readinessTarget(request);
+  if (!target) return null;
+
+  try {
+    const method = request.method === 'HEAD' ? 'HEAD' : 'GET';
+    const upstream = await fetch(target, {
+      method,
+      headers: { accept: 'application/json' },
+      redirect: 'manual',
+    });
+    const headers = new Headers(upstream.headers);
+    clearEncodingHeaders(headers);
+    headers.set('cache-control', 'no-store');
+    headers.set('x-content-type-options', 'nosniff');
+    return new Response(method === 'HEAD' ? null : upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers,
+    });
+  } catch {
+    return Response.json({ error: 'identity_readiness_unavailable' }, {
+      status: 502,
+      headers: {
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+      },
+    });
+  }
 }
 
 export function guardAuthLoop(request, response) {
@@ -81,6 +118,9 @@ function sanitizeProxyResponse(request, response) {
 }
 
 export default async function middleware(request) {
+  const readiness = await proxyReadiness(request);
+  if (readiness) return readiness;
+
   let response = await originalMiddleware(request);
   response = guardAuthLoop(request, response);
   response = await rewriteLegacyAccountLink(response);
