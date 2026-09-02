@@ -1,6 +1,7 @@
 name: Production Console Smoke
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - 'test/v90-console-production-smoke-*'
@@ -13,61 +14,61 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Canonical Console renders without redirect loop
+      - name: Health is healthy
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location \
-            --max-redirs 5 --connect-timeout 10 --max-time 30 \
-            --output /tmp/console.html \
-            --write-out '%{url_effective}\n%{num_redirects}\n%{http_code}\n' \
-            https://console.relead.com.mx/console/ > /tmp/console.meta
-          grep -q 'RelNet Console' /tmp/console.html
-          ! grep -qi 'My RelNet' /tmp/console.html
-          effective="$(sed -n '1p' /tmp/console.meta)"
-          redirects="$(sed -n '2p' /tmp/console.meta)"
-          status="$(sed -n '3p' /tmp/console.meta)"
-          [[ "$effective" == https://console.relead.com.mx/* ]]
-          [[ "$redirects" -le 5 ]]
-          [[ "$status" == 200 ]]
+          curl --fail --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            https://console.relnets.com/healthz \
+            --output /tmp/healthz.body
 
-      - name: Legacy Admin UI lands inside Console without looping
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --location \
-            --max-redirs 5 --connect-timeout 10 --max-time 30 \
-            --output /tmp/admin.html \
-            --write-out '%{url_effective}\n%{num_redirects}\n%{http_code}\n' \
-            https://console.relead.com.mx/admin > /tmp/admin.meta
-          grep -q 'RelNet Console' /tmp/admin.html
-          effective="$(sed -n '1p' /tmp/admin.meta)"
-          status="$(sed -n '3p' /tmp/admin.meta)"
-          [[ "$effective" == https://console.relead.com.mx/console/* ]]
-          [[ "$status" == 200 ]]
-
-      - name: Registration UI is reachable
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --location \
-            --max-redirs 5 --connect-timeout 10 --max-time 30 \
-            https://console.relead.com.mx/register \
-            --output /tmp/register.html
-          grep -qi '<form' /tmp/register.html
-          grep -Eqi 'registr|crear.*cuenta|sign.?up' /tmp/register.html
-
-      - name: Admin session endpoint remains API-shaped
+      - name: Readiness is truthful and ready
         run: |
           set -euo pipefail
           code="$(curl --silent --show-error \
             --max-redirs 0 --connect-timeout 10 --max-time 30 \
-            --output /tmp/admin-api.body \
-            --dump-header /tmp/admin-api.headers \
+            --output /tmp/readyz.body \
+            --dump-header /tmp/readyz.headers \
             --write-out '%{http_code}' \
-            https://console.relead.com.mx/admin/api/session || true)"
-          case "$code" in
-            200|401|403) ;;
-            *) echo "unexpected admin API status: $code" >&2; exit 1 ;;
-          esac
-          if grep -qi '^content-type: *text/html' /tmp/admin-api.headers; then
-            echo 'admin API unexpectedly returned HTML' >&2
-            exit 1
-          fi
+            https://console.relnets.com/readyz || true)"
+          echo "readyz_status=$code"
+          test "$code" = 200
+          ! grep -qi '^location:' /tmp/readyz.headers
+          ! grep -Eqi '<html|oauth|login' /tmp/readyz.body
+
+      - name: Login and signup are reachable
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --max-redirs 0 --connect-timeout 10 --max-time 30 \
+            https://console.relnets.com/login \
+            --output /tmp/login.html
+          curl --fail --silent --show-error \
+            --max-redirs 0 --connect-timeout 10 --max-time 30 \
+            https://console.relnets.com/signup \
+            --output /tmp/signup.html
+          grep -qi '<form' /tmp/login.html
+          grep -qi '<form' /tmp/signup.html
+          grep -qi 'password' /tmp/login.html
+          grep -qi 'password' /tmp/signup.html
+          grep -qi 'minlength="6"' /tmp/signup.html
+
+      - name: OIDC discovery and JWKS are valid JSON surfaces
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --max-redirs 0 --connect-timeout 10 --max-time 30 \
+            https://console.relnets.com/.well-known/openid-configuration \
+            --output /tmp/discovery.json
+          curl --fail --silent --show-error \
+            --max-redirs 0 --connect-timeout 10 --max-time 30 \
+            https://console.relnets.com/.well-known/jwks.json \
+            --output /tmp/jwks.json
+          node -e "const d=require('/tmp/discovery.json'); if(!d.issuer || !d.jwks_uri) process.exit(1)"
+          node -e "const j=require('/tmp/jwks.json'); if(!Array.isArray(j.keys) || !j.keys.length) process.exit(1)"
+
+      - name: Public auth surfaces contain no legacy RelNets hosts
+        run: |
+          set -euo pipefail
+          ! grep -Eqi 'auth\.relead\.com\.mx|console\.relead\.com\.mx|api\.relead\.com\.mx|builder\.relead\.com\.mx' \
+            /tmp/login.html /tmp/signup.html
